@@ -1,0 +1,7 @@
+node_modules/
+dist/
+src/vendor/
+.test-profile/
+releases/
+graphify-out/
+Panel.lnk

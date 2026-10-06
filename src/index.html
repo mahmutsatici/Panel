@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="tr" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: file: https:; connect-src https://api.open-meteo.com https://geocoding-api.open-meteo.com">
+  <title>Panel</title>
+  <link rel="stylesheet" href="../node_modules/@fontsource-variable/inter/index.css">
+  <link rel="stylesheet" href="vendor/editor.css">
+  <link rel="stylesheet" href="vendor/editor-dark.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Üst çubuk: düzenleme ve ayarlar (kartlardan bağımsız) -->
+  <header class="topbar">
+    <div class="tb-edit" id="editBar" hidden>
+      <div class="tb-tray" id="editTray"></div>
+      <button type="button" class="tb-btn" id="layoutReset" title="Varsayılan düzene dön">↺ Varsayılan</button>
+    </div>
+    <div class="tb-actions">
+      <button type="button" class="tb-btn" id="editLayout" title="Kartları taşı, gizle, boyutlandır">▦ Düzenle</button>
+      <button type="button" class="tb-btn icon" id="openSettings" title="Ayarlar">⚙</button>
+    </div>
+  </header>
+
+  <!-- Kartlar başlangıçta cardPool'da; js/layout.js ayarlara göre satırlara yerleştirir -->
+  <main class="layout" id="layout"></main>
+
+  <div id="cardPool" hidden>
+    <!-- Saat & tarih -->
+    <section class="card clock" data-card="clock">
+      <div class="greet" id="greet"></div>
+      <div class="time" id="time">--:--</div>
+      <div class="date" id="date"></div>
+      <div class="sub" id="dayInfo"></div>
+    </section>
+
+    <!-- Hava durumu -->
+    <section class="card weather" data-card="weather" id="weather">
+      <div class="card-head">
+        <h2 id="wCity">Hava durumu</h2>
+        <div class="actions">
+          <span class="w-stamp" id="wStamp"></span>
+          <button class="icon-btn" id="wRefresh" title="Yenile">↻</button>
+        </div>
+      </div>
+      <div id="wBody" class="w-body">
+        <p class="muted">Ayarlardan bir şehir seç.</p>
+      </div>
+    </section>
+
+    <!-- Takvim -->
+    <section class="card calendar" data-card="calendar">
+      <div class="card-head">
+        <h2 id="calTitle"></h2>
+        <div class="actions">
+          <button class="icon-btn" id="calPrev" title="Önceki ay">‹</button>
+          <button class="text-btn" id="calToday">Bugün</button>
+          <button class="icon-btn" id="calNext" title="Sonraki ay">›</button>
+        </div>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+    </section>
+
+    <!-- Özet -->
+    <section class="card stats" data-card="stats">
+      <div class="card-head"><h2>Özet</h2></div>
+      <div class="st-body" id="statsBody"></div>
+    </section>
+
+    <!-- Yapılacaklar -->
+    <section class="card todos" data-card="todos">
+      <div class="card-head">
+        <h2>Yapılacaklar <span class="badge" id="todoCount"></span></h2>
+        <div class="actions">
+          <button class="text-btn" id="toggleDone"></button>
+          <button class="text-btn" id="addCat" title="Yeni kategori">＋ Kategori</button>
+        </div>
+      </div>
+      <div id="todoList" class="todo-list"></div>
+    </section>
+
+    <!-- Notlar -->
+    <section class="card notes" data-card="notes">
+      <aside class="note-side">
+        <div class="card-head">
+          <h2>Notlar</h2>
+          <button class="icon-btn" id="newNote" title="Yeni not">＋</button>
+        </div>
+        <input id="noteSearch" class="search" placeholder="Notlarda ara…">
+        <ul id="noteList" class="note-list"></ul>
+      </aside>
+      <div class="note-main" id="noteMain">
+        <div class="note-toolbar">
+          <input id="noteTitle" class="note-title" spellcheck="false">
+          <span class="save-state" id="saveState"></span>
+          <button class="icon-btn danger" id="deleteNote" title="Notu sil">🗑</button>
+        </div>
+        <div class="note-body" id="noteEditor"></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Takvimde tıklanan günün görevleri (günün altında açılan pencere) -->
+  <div class="cal-day" id="calDay" hidden></div>
+
+  <!-- Görev son tarihi ve tekrarı için açılır pencere (js/core.js → pickDate) -->
+  <div class="date-pop" id="datePop" hidden></div>
+
+  <!-- Ayarlar -->
+  <dialog id="settingsDlg">
+    <form method="dialog" class="settings">
+      <h2 class="dlg-title"><img src="icons/logo.svg" alt="" draggable="false"> Ayarlar</h2>
+
+      <h3>Genel</h3>
+      <label>Adın
+        <input id="nameInput" placeholder="Saatin üstünde “Hoş geldiniz, …” olarak görünür" autocomplete="off" maxlength="40">
+      </label>
+      <label>Şehir
+        <div class="row">
+          <input id="cityInput" placeholder="ör. İstanbul" autocomplete="off">
+          <button type="button" id="citySearch">Ara</button>
+        </div>
+      </label>
+      <ul id="cityResults" class="city-results"></ul>
+      <p class="muted" id="cityCurrent"></p>
+      <label>Tema
+        <select id="themeSelect">
+          <option value="dark">Koyu</option>
+          <option value="navy">Lacivert</option>
+          <option value="light">Açık</option>
+          <option value="cream">Krem</option>
+          <option value="system">Sistem (koyu / açık)</option>
+        </select>
+      </label>
+
+      <h3>Kartlar</h3>
+      <p class="muted">Kartların arasındaki boşlukları sürükleyerek genişlik ve yükseklikleri ayarlayabilirsin. Kartları taşımak, bir satırı 2 ya da 3 sütun yapmak veya kart gizlemek için üst çubuktaki <b>▦ Düzenle</b>'yi kullan.</p>
+      <div class="row">
+        <button type="button" id="editLayoutFromSettings">▦ Düzeni düzenle</button>
+        <button type="button" id="layoutResetFromSettings">↺ Varsayılan düzen</button>
+      </div>
+      <label class="check"><input type="checkbox" id="compactWeather"> Hava durumu kartı sade (küçük) görünsün</label>
+
+      <h3>Sabah bildirimi</h3>
+      <label class="check"><input type="checkbox" id="notifyChk"> Her gün bugünün görevlerini ve gecikenleri Windows bildirimiyle özetle</label>
+      <div class="row time-row">
+        <span class="muted">Saat</span>
+        <button type="button" class="step" data-step="-15" title="15 dk geri">−</button>
+        <input id="notifyTime" class="time-input" maxlength="5" autocomplete="off">
+        <button type="button" class="step" data-step="15" title="15 dk ileri">+</button>
+        <button type="button" id="notifyTest">Şimdi dene</button>
+      </div>
+      <p class="muted">Bilgisayar o saatte kapalıysa, açıldığında gönderilir.</p>
+
+      <h3>Otomatik yedek</h3>
+      <label class="check"><input type="checkbox" id="backupChk"> Veri klasörünü her gün yedekle (son 7 gün saklanır)</label>
+      <div class="row">
+        <input id="backupDir" readonly placeholder="Yedek klasörü seçilmedi">
+        <button type="button" id="backupChoose">Klasör seç…</button>
+      </div>
+      <p class="muted" id="backupStatus"></p>
+      <div class="row">
+        <button type="button" id="backupNow">Şimdi yedekle</button>
+        <button type="button" id="backupOpen">Yedekleri aç</button>
+      </div>
+
+      <h3>Sistem</h3>
+      <label class="check"><input type="checkbox" id="autostartChk"> Windows açılınca başlat</label>
+      <p class="muted" id="autostartNote"></p>
+      <p class="muted">Kısayol: <kbd id="shortcutLbl"></kbd> paneli açar/gizler.</p>
+      <p class="muted">Silinen görev, kategori ve notlar kalıcı olarak silinmez; dosyalarında <code>&lt;!-- silindi: … --&gt;</code> işaretiyle pasif olarak kalır. <b>Silinenler</b> penceresinden tek tıkla ya da dosyadan bu işareti silerek geri getirebilirsin.</p>
+
+      <div class="row end">
+        <button type="button" id="openTrash">Silinenler…</button>
+        <button type="button" id="openData">Veri klasörünü aç</button>
+        <button value="close" class="primary">Kapat</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Silinenler -->
+  <dialog id="trashDlg">
+    <form method="dialog" class="settings trash">
+      <h2>Silinenler</h2>
+      <div id="trashBody"></div>
+      <div class="row end">
+        <button value="close" class="primary">Kapat</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="../node_modules/marked/lib/marked.umd.js"></script>
+  <script src="../node_modules/dompurify/dist/purify.min.js"></script>
+  <script src="vendor/editor.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/clock.js"></script>
+  <script src="js/weather.js"></script>
+  <script src="js/todos.js"></script>
+  <script src="js/calendar.js"></script>
+  <script src="js/stats.js"></script>
+  <script src="js/notes.js"></script>
+  <script src="js/trash.js"></script>
+  <script src="js/layout.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="8" y1="8" x2="248" y2="248" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="rgb(111,140,255)"/><stop offset="1" stop-color="rgb(139,92,246)"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="70" cy="60" r="190" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="58" fill="url(#bg)"/>
+  <rect x="8" y="8" width="240" height="240" rx="58" fill="url(#glow)"/>
+  <rect x="54" y="54" width="72" height="80" rx="15" fill="#fff" fill-opacity="0.97"/>
+  <rect x="138" y="54" width="64" height="50" rx="15" fill="#fff" fill-opacity="0.62"/>
+  <rect x="138" y="116" width="64" height="86" rx="15" fill="#fff" fill-opacity="0.36"/>
+  <rect x="54" y="146" width="72" height="56" rx="15" fill="#fff" fill-opacity="0.52"/>
+  <polyline points="73,96 87,110 110,77" fill="none" stroke="rgb(84,104,232)" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
