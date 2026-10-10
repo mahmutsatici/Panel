@@ -32,9 +32,33 @@ function fillSettingsDialog() {
   $('#cityCurrent').textContent = settings.city ? `Seçili: ${settings.city.name}${settings.city.region ? ', ' + settings.city.region : ''}` : 'Şehir seçilmedi.';
   $('#cityResults').innerHTML = '';
   $('#nameInput').value = settings.userName || '';
+  $('#geminiKeyInput').value = settings.geminiApiKey || '';
+  $('#geminiModelInput').value = settings.geminiModel || '';
+  $('#geminiStatus').textContent = settings.geminiApiKey ? '' : 'Henüz anahtar girilmedi; sesli asistan çalışmaz.';
+  $('#voiceShortcutLbl').textContent = settings.voiceShortcut.replace('Control', 'Ctrl');
   renderLayoutSettings();
   renderNotifyBackup();
 }
+
+// --- Sesli asistan (Gemini) ---
+$('#geminiKeyGet').onclick = () => api.openExternal('https://aistudio.google.com/app/apikey');
+$('#geminiSave').onclick = async () => {
+  $('#geminiStatus').textContent = 'Kaydediliyor…';
+  settings = await api.settings.set({
+    geminiApiKey: $('#geminiKeyInput').value.trim() || null,
+    geminiModel: $('#geminiModelInput').value.trim() || null,
+  });
+  $('#geminiStatus').textContent = 'Kaydedildi ✓';
+};
+$('#geminiTest').onclick = async () => {
+  $('#geminiStatus').textContent = 'Deneniyor…';
+  try {
+    const res = await api.assistant.test();
+    $('#geminiStatus').textContent = res?.speech ? `✓ ${res.speech}` : '✓ Bağlantı kuruldu.';
+  } catch (err) {
+    $('#geminiStatus').textContent = `⚠ ${cleanErr(err)}`;
+  }
+};
 
 // --- Sabah bildirimi & otomatik yedek ---
 function renderNotifyBackup() {

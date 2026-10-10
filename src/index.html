@@ -18,6 +18,7 @@
       <button type="button" class="tb-btn" id="layoutReset" title="Varsayılan düzene dön">↺ Varsayılan</button>
     </div>
     <div class="tb-actions">
+      <button type="button" class="tb-btn icon" id="micBtn" title="Sesli asistan (Ctrl+Alt+V)">🎙️</button>
       <button type="button" class="tb-btn" id="editLayout" title="Kartları taşı, gizle, boyutlandır">▦ Düzenle</button>
       <button type="button" class="tb-btn icon" id="openSettings" title="Ayarlar">⚙</button>
     </div>
@@ -107,6 +108,13 @@
   <!-- Görev son tarihi ve tekrarı için açılır pencere (js/core.js → pickDate) -->
   <div class="date-pop" id="datePop" hidden></div>
 
+  <!-- Sesli asistan: dinleme/düşünme durumu, anlaşılan cümle ve cevap (js/assistant.js) -->
+  <div class="assistant-pop" id="assistantPop" hidden>
+    <div class="as-head"><span class="as-state" id="asState"></span><button type="button" class="icon-btn" id="asClose" title="Kapat (Esc)">✕</button></div>
+    <p class="as-heard" id="asHeard"></p>
+    <p class="as-answer" id="asAnswer"></p>
+  </div>
+
   <!-- Ayarlar -->
   <dialog id="settingsDlg">
     <form method="dialog" class="settings">
@@ -165,6 +173,25 @@
         <button type="button" id="backupOpen">Yedekleri aç</button>
       </div>
 
+      <h3>Sesli asistan</h3>
+      <p class="muted">Mikrofon düğmesine (<kbd id="voiceShortcutLbl">Ctrl+Alt+V</kbd>) basıp konuşarak görev ekleyebilir, görevlerin hakkında soru sorabilirsin. Google'ın <b>ücretsiz</b> Gemini API anahtarını gerektirir — kredi kartı istemez, ücretsiz kullanım sınırını aşmadıkça (ve faturalandırma açmadıkça) ücret çıkmaz.</p>
+      <div class="row">
+        <button type="button" id="geminiKeyGet">Ücretsiz anahtar al (Google AI Studio)</button>
+      </div>
+      <label>API anahtarı
+        <input id="geminiKeyInput" type="password" placeholder="AIza… " autocomplete="off" spellcheck="false">
+      </label>
+      <label>Model
+        <input id="geminiModelInput" placeholder="ör. gemini-flash-lite-latest" autocomplete="off" spellcheck="false">
+      </label>
+      <p class="muted">Google AI Studio'daki model listesinde "Flash Lite" etiketli bir model günlük en yüksek ücretsiz kullanım hakkını verir. Tam model kimliğini oradan kopyalayıp buraya yapıştır.</p>
+      <div class="row">
+        <button type="button" id="geminiSave">Kaydet</button>
+        <button type="button" id="geminiTest">Bağlantıyı dene</button>
+      </div>
+      <p class="muted" id="geminiStatus"></p>
+      <p class="muted">Sesin ve görev listenin metni, yalnızca konuştuğun anda Google'ın sunucularına gönderilir; başka hiçbir yere kaydedilmez. Cevapların sesli okunması tamamen bu bilgisayarda olur.</p>
+
       <h3>Sistem</h3>
       <label class="check"><input type="checkbox" id="autostartChk"> Windows açılınca başlat</label>
       <p class="muted" id="autostartNote"></p>
@@ -198,6 +225,7 @@
   <script src="js/weather.js"></script>
   <script src="js/todos.js"></script>
   <script src="js/calendar.js"></script>
+  <script src="js/assistant.js"></script>
   <script src="js/stats.js"></script>
   <script src="js/notes.js"></script>
   <script src="js/trash.js"></script>

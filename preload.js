@@ -33,6 +33,12 @@ contextBridge.exposeInMainWorld('panel', {
     now: () => call('backup:now'),
     open: () => call('backup:open'),
   },
+  assistant: {
+    ask: (audioBytes, mimeType, contextText) => call('assistant:ask', audioBytes, mimeType, contextText),
+    test: () => call('assistant:test'),
+    // Ctrl+Alt+V kısayolu pencere gizliyken de çalışır; ana süreç bu olayı gönderir.
+    onTrigger: cb => ipcRenderer.on('assistant:trigger', () => cb()),
+  },
   setTitleBar: (color, symbolColor) => call('app:titleBar', color, symbolColor),
   openDataDir: () => call('app:openDataDir'),
   openExternal: url => call('app:openExternal', url),

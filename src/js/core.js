@@ -13,6 +13,9 @@ const renderInline = md => DOMPurify.sanitize(marked.parseInline(md));
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const lower = s => String(s).toLocaleLowerCase('tr');
+// Electron, ana süreçte fırlatılan hataları "Error invoking remote method '...': Error: ..." diye
+// sarmalıyor; kullanıcıya sadece asıl mesajı göstermek için bu sarmalamayı temizler.
+const cleanErr = e => String(e?.message || e).replace(/^Error invoking remote method '[^']*':\s*(Error:\s*)?/, '');
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },

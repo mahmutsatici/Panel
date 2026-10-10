@@ -112,13 +112,19 @@ function renderCalendar() {
   grid.querySelectorAll('.cal-d').forEach(b => b.onclick = () => {
     // Aynı güne tekrar tıklamak pencereyi kapatır
     if (calDayOpen && calSelected === b.dataset.iso) return closeCalDay();
-    calSelected = b.dataset.iso;
-    calDayOpen = true;
-    const d = parseISODate(calSelected);
-    if (d.getMonth() !== calMonth.getMonth()) calMonth = new Date(d.getFullYear(), d.getMonth(), 1);
-    renderCalendar();
+    openCalDay(b.dataset.iso);
   });
   if (calDayOpen) renderCalDay(byDue);
+}
+
+// Takvimde bir günü seçip gün penceresini açar. Hücreye tıklamanın yanı sıra sesli asistanın
+// "highlight_date" ile bir cevabı görsel olarak göstermesi için de kullanılır.
+function openCalDay(iso) {
+  calSelected = iso;
+  calDayOpen = true;
+  const d = parseISODate(iso);
+  if (d.getMonth() !== calMonth.getMonth()) calMonth = new Date(d.getFullYear(), d.getMonth(), 1);
+  renderCalendar();
 }
 
 // Seçili günün görevleri (+ bugün seçiliyse gecikmiş görevler)

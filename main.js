@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, globalShortcut, shell, nativeImage, screen, Notification, dialog } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, globalShortcut, shell, nativeImage, screen, Notification, dialog, session } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
 const { pathToFileURL } = require('url');
@@ -9,6 +9,7 @@ app.commandLine.appendSwitch('lang', 'tr');
 app.setAppUserModelId('local.masaustu.panel');
 
 const SHORTCUT = 'Control+Alt+P';
+const VOICE_SHORTCUT = 'Control+Alt+V';   // sesli asistanı açar/kapatır (pencere gizliyken de çalışır)
 // Logo dosyaları: paketlenmiş sürümde asar'ın dışında (resources/assets) durur, böylece pencere, tepsi ve
 // bildirimler gerçek bir dosya yolundan okur. Geliştirmede proje klasöründeki assets kullanılır.
 const ASSETS = app.isPackaged ? path.join(process.resourcesPath, 'assets') : path.join(__dirname, 'assets');
@@ -36,6 +37,10 @@ const DEFAULT_SETTINGS = {
   titleBar: { color: '#0e1016', symbolColor: '#e9ebf0' },
   notify: { enabled: true, time: '09:00', lastDate: null },
   backup: { enabled: false, dir: null, lastAt: null, lastDate: null, error: null },
+  // Sesli asistan: ücretsiz Google AI Studio anahtarı kullanıcıdan alınır, asla pakete/koda gömülmez.
+  // Model adı da ayardan değiştirilebilir — Google'ın güncel model kimliği Ayarlar'daki isimle
+  // birebir aynı olmayabilir, kullanıcı Google AI Studio'daki tam kimliği yapıştırmalı.
+  geminiApiKey: null, geminiModel: 'gemini-flash-lite-latest',
 };
 
 async function ensureData() {
@@ -227,6 +232,63 @@ async function checkSchedules() {
 
 const IMAGE_TYPES ={ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp', 'image/bmp': 'bmp' };
 
+// ---------- Sesli asistan (Gemini API) ----------
+// Arayüz ses kaydını + o anki görev listesini (metin) gönderir; burada tek bir Gemini isteğine
+// dönüştürülür. Ses tanıma + anlama + muhakeme Gemini'de olur, yerel bir konuşma tanımaya gerek yoktur.
+// Cevap sesli okuma (TTS) tamamen yerelde/bedava kalır (bkz. src/js/assistant.js → speechSynthesis).
+const ASSISTANT_SYSTEM_PROMPT = `Sen "Panel" adlı kişisel masaüstü uygulamasının sesli asistanısın. Kullanıcı Türkçe konuşuyor, sesini dinliyorsun.
+Her istekte sana kullanıcının güncel görev listesi (kategoriler, görevler, tarihler) metin olarak da veriliyor; cevabını buna göre ver.
+
+Yanıtını SADECE verilen JSON şemasına uygun, Türkçe olarak ver:
+- type "add_task": kullanıcı yeni bir görev eklemek istiyor VE hangi kategoriye ekleneceği ya söylendi ya da context'teki "Önceki istek" notundan belli.
+  task_text: görevin kısa net metni (tarih/kategori ifadelerini metinden çıkar). due: varsa YYYY-AA-GG. rec: varsa tekrar kuralı ("her gün" / "hafta içi" / "her hafta" / "her N hafta" / "her ay" / "her yıl"). category: hangi kategoriye eklenecek (mevcut kategorilerden biri ya da kullanıcının söylediği yeni bir isim).
+  speech: kullanıcıya kısa sesli onay (ör. "Tamam, iş kategorisine rapor yaz eklendi.").
+- type "need_category": kullanıcı görev eklemek istiyor ama kategoriyi söylemedi ve context'te "Önceki istek" notu da yok.
+  task_text/due/rec'i yine doldur. speech: "Hangi kategoriye eklemek istersin?" gibi kısa bir soru.
+- type "answer": kullanıcı bir soru soruyor ya da genel bir şey söylüyor (görev ekleme değil). Verilen görev listesine bakarak Türkçe, kısa (sesli okunacağı için en fazla 2-3 cümle) bir cevap ver. Belirli bir güne bağlı bir soruysa highlight_date alanına o tarihi (YYYY-AA-GG) yaz, değilse boş bırak.
+
+heard alanına kullanıcının söylediğini anladığın haliyle yaz (kullanıcıya "seni şöyle anladım" diye gösterilecek).
+Anlayamadığın bir ses gelirse type "answer" ile nazikçe tekrar etmesini iste.`;
+const ASSISTANT_RESPONSE_SCHEMA = {
+  type: 'object',
+  properties: {
+    type: { type: 'string', enum: ['add_task', 'answer', 'need_category'] },
+    heard: { type: 'string' },
+    speech: { type: 'string' },
+    task_text: { type: 'string' },
+    due: { type: 'string' },
+    rec: { type: 'string' },
+    category: { type: 'string' },
+    highlight_date: { type: 'string' },
+  },
+  required: ['type', 'speech'],
+};
+async function askAssistant(audioBytes, mimeType, contextText) {
+  const s = await readSettings();
+  if (!s.geminiApiKey) throw new Error('Gemini API anahtarı girilmemiş (Ayarlar → Sesli asistan).');
+  if (!s.geminiModel) throw new Error('Gemini model adı girilmemiş (Ayarlar → Sesli asistan).');
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(s.geminiModel)}:generateContent?key=${encodeURIComponent(s.geminiApiKey)}`;
+  // audioBytes boşsa (ör. Ayarlar'daki bağlantı testi) sadece metinle istek atılır
+  const parts = [{ text: contextText }];
+  if (audioBytes) parts.push({ inlineData: { mimeType, data: Buffer.from(audioBytes).toString('base64') } });
+  const body = {
+    systemInstruction: { parts: [{ text: ASSISTANT_SYSTEM_PROMPT }] },
+    contents: [{ role: 'user', parts }],
+    generationConfig: { responseMimeType: 'application/json', responseSchema: ASSISTANT_RESPONSE_SCHEMA },
+  };
+  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    let msg = `Gemini isteği başarısız (${res.status})`;
+    try { msg = JSON.parse(errText)?.error?.message || msg; } catch {}
+    throw new Error(msg);
+  }
+  const data = await res.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('Gemini boş yanıt döndürdü (ses anlaşılamamış olabilir).');
+  try { return JSON.parse(text); } catch { throw new Error('Gemini yanıtı çözümlenemedi.'); }
+}
+
 // ---------- IPC ----------
 function registerIpc() {
   ipcMain.handle('todos:read', () => fs.readFile(todoFile(), 'utf8'));
@@ -292,7 +354,7 @@ function registerIpc() {
 
   // notesUrl: notlardaki göreli resim yollarının (resimler/…) çözüleceği klasör
   const withRuntime = s => ({
-    ...s, isPackaged: app.isPackaged, shortcut: SHORTCUT,
+    ...s, isPackaged: app.isPackaged, shortcut: SHORTCUT, voiceShortcut: VOICE_SHORTCUT,
     notesUrl: pathToFileURL(notesDir()).href + '/',
   });
   ipcMain.handle('settings:get', async () => withRuntime(await readSettings()));
@@ -328,6 +390,11 @@ function registerIpc() {
   ipcMain.handle('app:openExternal', (_e, url) => {
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);
   });
+
+  ipcMain.handle('assistant:ask', (_e, audioBytes, mimeType, contextText) => askAssistant(audioBytes, mimeType, contextText));
+  // Ayarlar'daki "Bağlantıyı dene": ses göndermeden anahtar/model doğru mu diye küçük bir metin isteği
+  ipcMain.handle('assistant:test', () => askAssistant(null, null,
+    'Bu bir bağlantı testidir, gerçek bir kullanıcı isteği değil. type "answer", speech alanına sadece "Bağlantı başarılı." yaz.'));
 
   // Tema değişince üst çubuğun (pencere denetim düğmelerinin arkasındaki alan) rengini güncelle
   ipcMain.handle('app:titleBar', async (_e, color, symbolColor) => {
@@ -411,11 +478,20 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(async () => {
     await ensureData();
     registerIpc();
+    // Sesli asistan mikrofon izni ister; Electron varsayılan olarak reddeder, burada izin veriyoruz
+    // (Windows kendi "Mikrofona erişime izin ver" sorusunu ayrıca gösterir, bu ondan bağımsız).
+    session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => callback(permission === 'media'));
     const settings = await readSettings();
     applyAutostart(settings.autostart);
     createWindow(settings, process.argv.includes('--hidden'));
     createTray();
     globalShortcut.register(SHORTCUT, toggleWindow);
+    // Pencere gizliyken de sesli asistanı açabilmek için: önce göster, sonra arayüze haber ver.
+    globalShortcut.register(VOICE_SHORTCUT, () => {
+      if (!win) return;
+      win.show(); win.focus();
+      win.webContents.send('assistant:trigger');
+    });
     // Bildirim/yedek zamanlayıcısı: açılıştan kısa süre sonra, sonra dakikada bir
     setTimeout(() => checkSchedules().catch(() => {}), 8000);
     setInterval(() => checkSchedules().catch(() => {}), 60 * 1000);
