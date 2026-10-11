@@ -18,6 +18,7 @@ Saat, tarih, hava durumu, yapılacaklar, Markdown notlar ve sesli asistan SPARK 
   Tekrar kuralları: `her gün`, `hafta içi`, `her hafta`, `her 2 hafta`, `her ay`, `her yıl`, `her N gün/hafta/ay`.
 - `notes\resimler\` — notlara yapıştırılan resimler. Notta `![resim|300](resimler/…)` olarak durur
   (`|300` genişliktir; Obsidian ile aynı biçim).
+- Ayar güvenliği: `settings.json` her kayıtta `%APPDATA%\Panel\settings-yedek\son.json` ve yedek klasöründeki `Panel yedekleri\ayarlar.json` dosyalarına kopyalanır. Ayarlar bozulur/sıfırlanırsa uygulama açılışta bunlardan geri yükler; sürüm değişince önceki ayarlar `surum-<sürüm>-oncesi.json` olarak da saklanır (son 5). Tüm `%APPDATA%\Panel` silinirse `ayarlar.json`'u elle `data\settings.json` yerine kopyala.
 - Otomatik yedek: Ayarlar'da seçilen klasörde `Panel yedekleri\YYYY-AA-GG\` (son 7 gün).
 
 ## Görev ekleme
@@ -39,6 +40,7 @@ listesine bakıp cevap verme Gemini'de oluyor, ayrı bir yerel konuşma tanımay
 - "Yarın rapor yaz ekle iş kategorisine" gibi bir cümle hem görevi hem tarihi hem kategoriyi anlar.
 - Var olan görevleri de değiştirir: "süt almayı tamamla", "rapor görevini cumaya al", "eski işi sil" (silinenler Silinenler'den geri gelir).
 - Bağlamında tarih/saat, hava durumu ve görev listesi var: "bugün hava nasıl?", "yarın şemsiye lazım mı?".
+- **Yazılı sohbet:** SPARK kartının altındaki kutuya yazarak da konuşabilirsin; aynı sohbetten devam eder, cevabı sesli okumaz. Tek mesajda birden fazla görev eklenebilir: "yarın rapor yaz, cuma sunum hazırla, süt almayı tamamla".
 - **Otomatik gönderme:** konuşman bitince (ayarlanabilir sessizlik süresinden sonra) kayıt kendiliğinden gönderilir; Ayarlar → SPARK → Dinleme.
 - Kategori söylenmezse SPARK sesle sorar, cevabını dinler.
 - "16 Ekimde iş kategorisinde ne var?" gibi sorularda görev listesine bakıp cevap verir; belirli

@@ -213,7 +213,7 @@ function weatherContext() {
   });
   return lines.join('\n');
 }
-function tasksContext() {
+function tasksContext(typedText) {
   const now = new Date(), today = todayISO();
   const lines = [`Şu an: ${today} (${fmtLongDay.format(parseISODate(today))}) saat ${fmtTime.format(now)}`, '', weatherContext(), '', 'Görev listesi:'];
   ctxTasks = new Map();
@@ -226,11 +226,21 @@ function tasksContext() {
       lines.push(`[${id}] ${taskLine(t)}`);
     }
   }
-  if (pending) {
-    lines.push('', `Önceki istek: kullanıcı "${pending.text}" görevini eklemek istiyor` +
-      ` (tarih: ${pending.due || 'yok'}, tekrar: ${pending.rec || 'yok'}).` +
-      ' Şimdi söylediği sadece kategori adı olacak; buna göre type "add_task" ile tamamla.');
+  // Aynı sohbetten devam: son birkaç konuşma Gemini'ye de gider
+  const recent = sparkLog.filter(e => e.answer && e.kind !== 'error').slice(-6);
+  if (recent.length) {
+    lines.push('', 'Önceki konuşma (eskiden yeniye):');
+    for (const e of recent) {
+      if (e.heard) lines.push(`Kullanıcı: ${e.heard}`);
+      lines.push(`SPARK: ${e.answer}`);
+    }
   }
+  if (pending?.length) {
+    lines.push('', 'Önceki istek: kullanıcı şu görevleri eklemek istiyor:');
+    for (const p of pending) lines.push(`- "${p.task_text}" (tarih: ${p.due || 'yok'}, tekrar: ${p.rec || 'yok'})`);
+    lines.push('Şimdi söylediği/yazdığı sadece kategori adı olacak; buna göre type "actions" ile hepsini add_task olarak o kategoriye ekle.');
+  }
+  if (typedText) lines.push('', `Kullanıcının YAZDIĞI mesaj (ses yok): ${typedText}`);
   return lines.join('\n');
 }
 
@@ -375,10 +385,12 @@ function renderLog() {
   }
   ul.innerHTML = sparkLog.map(e => `
     ${e.heard ? `<li class="msg me"><span>${esc(e.heard)}</span></li>` : ''}
-    <li class="msg spark ${e.kind}"><span>${esc(e.answer)}</span><time>${fmtLogTime.format(new Date(e.at))}</time></li>`).join('');
+    ${e.answer ? `<li class="msg spark ${e.kind}"><span>${esc(e.answer)}</span><time>${fmtLogTime.format(new Date(e.at))}</time></li>` : ''}`).join('');
   ul.scrollTop = ul.scrollHeight;
 }
+let tempEntry = null;   // yazılı mesaj gönderildi, cevap bekleniyor (balon hemen görünsün)
 function addLog(heard, answer, kind) {
+  if (tempEntry) { sparkLog = sparkLog.filter(e => e !== tempEntry); tempEntry = null; }
   sparkLog.push({ at: Date.now(), heard: heard || '', answer: answer || '', kind });
   sparkLog = sparkLog.slice(-30);
   store.set('sparkLog', sparkLog);
@@ -418,7 +430,32 @@ async function toggleListening() {
     setState('error');
   }
 }
+let typedMode = false;   // true: yazılı sohbet — cevap sesli okunmaz
+async function sendTyped(text) {
+  text = text.trim();
+  if (!text) return;
+  if (asState === 'thinking' && !voicePrep) return;   // bir cevap beklenirken yenisi gönderilmez
+  if (asState === 'listening') cancelListening('');
+  stopSpeaking();
+  typedMode = true;
+  tempEntry = { at: Date.now(), heard: text, answer: '', kind: 'wait' };
+  sparkLog.push(tempEntry);
+  renderLog();
+  setState('thinking');
+  try {
+    const res = await api.assistant.ask(null, null, tasksContext(text));
+    res.heard = text;
+    await handleResponse(res);
+  } catch (err) {
+    const msg = cleanErr(err);
+    showExchange(text, msg);
+    addLog(text, msg, 'error');
+    setState('error');
+    autoCloseTimer = setTimeout(() => setState('idle'), 4000);
+  }
+}
 async function stopAndSend() {
+  typedMode = false;
   clearTimeout(recordTimeout);
   setState('thinking');
   const blob = await stopRecordingRaw();
@@ -436,54 +473,106 @@ async function stopAndSend() {
   }
 }
 
-// Gemini'nin mevcut görevler üzerinde yapabildiği işlemler (todos.js'teki aynı fonksiyonlar kullanılır,
+// Gemini'nin görevler üzerinde yapabildiği işlemler (todos.js'teki aynı fonksiyonlar kullanılır,
 // böylece elle yapılan işlemle birebir aynı sonucu verir: tekrarlayan görev, silinenler işareti vb.)
 const TASK_ACTIONS = new Set(['complete_task', 'reopen_task', 'delete_task', 'update_task']);
-async function applyTaskAction(type, { cat, task }, res) {
-  if (type === 'complete_task') return setDone(cat, task, true);
-  if (type === 'reopen_task') return setDone(cat, task, false);
-  if (type === 'delete_task') { deleteTask(cat, task); return saveTodos(); }
-  // update_task: yalnızca Gemini'nin doldurduğu alanlar değişir; "yok" ilgili alanı kaldırır
-  if (res.new_text?.trim()) task.text = res.new_text.trim();
-  if (res.due) task.due = /^yok$/i.test(res.due) ? undefined : res.due;
-  if (res.rec) task.rec = /^yok$/i.test(res.rec) ? undefined : res.rec;
-  return saveTodos();
+const LEGACY_TYPES = new Set(['add_task', ...TASK_ACTIONS]);
+// Eski tek-işlem biçimi gelirse (type: "add_task" vb.) actions dizisine çevir
+function actionsOf(res) {
+  if (Array.isArray(res.actions) && res.actions.length) return res.actions;
+  if (LEGACY_TYPES.has(res.type)) return [{ action: res.type, ...res }];
+  return [];
+}
+async function applyTaskAction(a) {
+  const target = ctxTasks.get(a.task_id);
+  // Görev bu arada silinmiş/değişmişse (ya da kimlik hatalıysa) dokunma
+  if (!target || !target.cat.tasks.includes(target.task)) return false;
+  const { cat, task } = target;
+  if (a.action === 'complete_task') await setDone(cat, task, true);
+  else if (a.action === 'reopen_task') await setDone(cat, task, false);
+  else if (a.action === 'delete_task') { deleteTask(cat, task); await saveTodos(); }
+  else {
+    // update_task: yalnızca Gemini'nin doldurduğu alanlar değişir; "yok" ilgili alanı kaldırır
+    if (a.new_text?.trim()) task.text = a.new_text.trim();
+    if (a.due) task.due = /^yok$/i.test(a.due) ? undefined : a.due;
+    if (a.rec) task.rec = /^yok$/i.test(a.rec) ? undefined : a.rec;
+    await saveTodos();
+  }
+  return true;
 }
 
 async function handleResponse(res) {
   if (asState !== 'thinking') return;   // kullanıcı bu arada kapattıysa sonucu uygulama
   showExchange(res.heard, res.speech);
+  let acts = actionsOf(res);
+  const isNew = a => a.action === 'add_task' && a.task_text;
 
-  if (res.type === 'need_category') {
-    pending = { text: res.task_text || '', due: res.due || null, rec: res.rec || null };
-    addLog(res.heard, res.speech, 'asking');
-    setState('thinking');                 // ses hazırlanırken
-    const voice = await sayAndShow(res.speech, 'asking');
-    // Soru bitince mikrofonu otomatik aç (kullanıcı araya girip kapatmadıysa)
-    if (asState === 'asking' && voice !== null) toggleListening();
+  // Kategori sorusuna cevap: model görevleri taşımayı unutursa (küçük modeller bazen unutuyor) söylenen
+  // kategori adından bekleyen görevler yerel olarak tamamlanır.
+  if (pending?.length) {
+    const heard = lower(res.heard || '');
+    const hit = activeCats().filter(c => heard.includes(lower(c.name)));
+    if (hit.length === 1) {
+      const adds = acts.filter(isNew);
+      if (adds.length) adds.forEach(a => { if (!a.category?.trim()) a.category = hit[0].name; });
+      else {
+        acts = [...acts, ...pending.map(p => ({ ...p, category: hit[0].name }))];
+        res.speech = `${pending.length} görevi ${hit[0].name} kategorisine ekledim.`;
+        showExchange(res.heard, res.speech);
+      }
+    }
+  }
+
+  // Kategorisi söylenmemiş yeni görevler: birden fazla kategori varsa model karar vermiş olsa bile sorulur
+  // (tahminle yanlış kategoriye görev eklemek, sormaktan daha kötü). Tek kategori varsa ona eklenir.
+  const multiCat = activeCats().length > 1;
+  // Model kategoriyi tahminle de doldurabilir; kullanıcı (bu ya da son mesajlarda) o kategoriyi anmadıysa
+  // "söylenmemiş" sayılır ve sorulur. Eşleşme: kategori adının tamamı ya da 3+ harfli herhangi bir sözcüğü.
+  const said = lower([...sparkLog.slice(-4).map(e => e.heard), res.heard || ''].join(' '));
+  const mentioned = name => {
+    const n = lower(name || '').trim();
+    return !!n && (said.includes(n) || n.split(/\s+/).some(w => w.length >= 3 && said.includes(w)));
+  };
+  const hasCat = a => !!a.category?.trim() && mentioned(a.category);
+  const missing = multiCat ? acts.filter(a => isNew(a) && !hasCat(a)) : [];
+  const ready = acts.filter(a => !missing.includes(a));
+
+  pending = null;
+  let finalState = 'answer', speech = res.speech, added = 0, changed = 0, failed = 0, lastCat = null;
+  for (const a of ready) {
+    if (isNew(a)) {
+      const cat = resolveCategory(a.category);
+      lastCat = cat;
+      await addTask(cat, a.task_text, a.due || null, a.rec || null);
+      added++;
+    } else if (TASK_ACTIONS.has(a.action)) {
+      if (await applyTaskAction(a)) changed++; else failed++;
+    }
+  }
+  if (lastCat) selectCat(lastCat.name);
+
+  if (missing.length || res.type === 'need_category') {
+    // Kategori sorulacak; bekleyen görevler bir sonraki mesaja bağlam olarak taşınır
+    pending = missing.length ? missing : null;
+    if (missing.length) {
+      const done = added + changed ? `${added + changed} işlem tamam. ` : '';
+      speech = `${done}${missing.length > 1 ? 'Bu görevleri' : 'Bu görevi'} hangi kategoriye ekleyeyim?`;
+    }
+    showExchange(res.heard, speech);
+    addLog(res.heard, speech, 'asking');
+    setState('thinking');
+    const voice = await sayAndShow(speech, 'asking');
+    // Soru sesli sorulduysa mikrofon otomatik açılır (kullanıcı araya girip kapatmadıysa)
+    if (asState === 'asking' && voice !== null && voice !== 'sessiz') toggleListening();
     return;
   }
 
-  pending = null;
-  let finalState = 'answer', speech = res.speech;
-  if (res.type === 'add_task' && res.task_text) {
-    const cat = resolveCategory(res.category);
-    selectCat(cat.name);
-    addTask(cat, res.task_text, res.due || null, res.rec || null);
-    finalState = 'added';
-  } else if (TASK_ACTIONS.has(res.type)) {
-    const target = ctxTasks.get(res.task_id);
-    // Görev bu arada silinmiş/değişmişse (ya da kimlik hatalıysa) hiçbir şeye dokunma
-    if (target && target.cat.tasks.includes(target.task)) {
-      await applyTaskAction(res.type, target, res);
-      finalState = 'done';
-    } else {
-      speech = 'Hangi görevi kastettiğinden emin olamadım, tekrar söyler misin?';
-      showExchange(res.heard, speech);
-    }
-  } else if (res.highlight_date) {
-    openCalDay(res.highlight_date);
-  }
+  if (added) finalState = 'added';
+  else if (changed) finalState = 'done';
+  else if (failed) speech = 'Hangi görevi kastettiğinden emin olamadım, tekrar söyler misin?';
+  else if (res.highlight_date) openCalDay(res.highlight_date);
+  if (failed && (added || changed)) speech += ' Bir kısmını bulamadım.';
+  if (speech !== res.speech) showExchange(res.heard, speech);
   addLog(res.heard, speech, finalState);
   await sayAndShow(speech, finalState);
   if (asState === finalState) autoCloseTimer = setTimeout(() => { if (!sparkCardVisible()) closeAssistant(); else setState('idle'); }, 4000);
@@ -491,6 +580,7 @@ async function handleResponse(res) {
 // Cevabı seslendir; konuşurken durum "konuşuyor", bitince verilen son durum. Windows sesine
 // düşüldüyse bunu durum yazısında belirt (kota dolduğunu kullanıcı anlasın).
 async function sayAndShow(text, endState) {
+  if (typedMode) { setState(endState); return 'sessiz'; }   // yazılı sohbet: sessiz cevap
   // Gemini sesi birkaç saniyede hazırlanır; yazı ekranda zaten görünüyor, durum bunu belirtsin
   setState('thinking', 'ses hazırlanıyor…');
   voicePrep = true;
@@ -510,6 +600,13 @@ async function previewVoice(voice) {
 }
 
 for (const b of [$('#micBtn'), $('#sparkMic')]) b.onclick = toggleListening;
+$('#sparkForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const input = $('#sparkText');
+  const text = input.value;
+  input.value = '';
+  sendTyped(text);
+});
 api.assistant.onTrigger(toggleListening);
 document.addEventListener('keydown', e => {
   // Ctrl+Alt+V global kısayolun yanında, pencere odaktayken de çalışsın

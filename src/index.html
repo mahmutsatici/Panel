@@ -30,10 +30,13 @@
   <div id="cardPool" hidden>
     <!-- Saat & tarih -->
     <section class="card clock" data-card="clock">
-      <div class="greet" id="greet"></div>
-      <div class="time" id="time">--:--</div>
-      <div class="date" id="date"></div>
-      <div class="sub" id="dayInfo"></div>
+      <div class="card-head"><h2>Saat</h2></div>
+      <div class="clock-body">
+        <div class="greet" id="greet"></div>
+        <div class="time" id="time">--:--</div>
+        <div class="date" id="date"></div>
+        <div class="sub" id="dayInfo"></div>
+      </div>
     </section>
 
     <!-- SPARK: sesli asistan kartı (küre animasyonu + konuşma geçmişi; js/assistant.js) -->
@@ -50,13 +53,17 @@
           <button type="button" class="spark-mic" id="sparkMic" title="Konuş (Ctrl+Alt+V)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.5 21h7"/></svg></button>
         </div>
         <ul class="spark-log" id="sparkLog"></ul>
+        <form class="spark-form" id="sparkForm" autocomplete="off">
+          <input id="sparkText" placeholder="Görev yaz ya da soru sor…" maxlength="500" spellcheck="false">
+          <button type="submit" id="sparkSend" title="Gönder (Enter)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+        </form>
       </div>
     </section>
 
     <!-- Hava durumu -->
     <section class="card weather" data-card="weather" id="weather">
       <div class="card-head">
-        <h2 id="wCity">Hava durumu</h2>
+        <h2>Hava durumu <span class="head-sub" id="wCity"></span></h2>
         <div class="actions">
           <span class="w-stamp" id="wStamp"></span>
           <button class="icon-btn" id="wRefresh" title="Yenile">↻</button>
@@ -70,11 +77,12 @@
     <!-- Takvim -->
     <section class="card calendar" data-card="calendar">
       <div class="card-head">
-        <h2 id="calTitle"></h2>
+        <h2>Takvim</h2>
         <div class="actions">
           <button class="icon-btn" id="calPrev" title="Önceki ay">‹</button>
-          <button class="text-btn" id="calToday">Bugün</button>
+          <span class="cal-month" id="calTitle"></span>
           <button class="icon-btn" id="calNext" title="Sonraki ay">›</button>
+          <button class="text-btn" id="calToday">Bugün</button>
         </div>
       </div>
       <div class="cal-grid" id="calGrid"></div>

@@ -6,7 +6,7 @@ const { pathToFileURL } = require('url');
 // Yerleşik arayüz parçaları Türkçe olsun
 app.commandLine.appendSwitch('lang', 'tr');
 // Windows bildirimlerinde uygulama adı/simgesi doğru görünsün (package.json → build.appId ile aynı)
-app.setAppUserModelId('local.masaustu.panel');
+app.setAppUserModelId(app.isPackaged ? 'local.masaustu.panel' : 'local.masaustu.panel.dev');
 
 const SHORTCUT = 'Control+Alt+P';
 const VOICE_SHORTCUT = 'Control+Alt+V';   // sesli asistanı açar/kapatır (pencere gizliyken de çalışır)
@@ -62,13 +62,93 @@ async function ensureData() {
 
 async function readSettings() {
   let saved = {};
-  try { saved = JSON.parse(await fs.readFile(settingsFile(), 'utf8')); } catch {}
+  try { saved = JSON.parse(await fs.readFile(settingsFile(), 'utf8')); }
+  catch { saved = (await readJson(snapFile())) || {}; }   // dosya yok/bozuk → son sağlam kopya
   return {
     ...DEFAULT_SETTINGS, ...saved,
     titleBar: { ...DEFAULT_SETTINGS.titleBar, ...(saved.titleBar || {}) },
     notify: { ...DEFAULT_SETTINGS.notify, ...(saved.notify || {}) },
     backup: { ...DEFAULT_SETTINGS.backup, ...(saved.backup || {}) },
   };
+}
+
+// ---------- Başlat menüsü kısayolu ----------
+// Windows görev çubuğu simgesini, uygulama kimliğiyle (AUMID) eşleşen Başlat menüsü kısayolundan alır.
+// Kurulumun kısayolu yoksa/silinmişse Windows aynı kimliği taşıyan başka bir kısayolu (ör. geliştirme
+// sırasında Electron'un kendiliğinden oluşturduğu "Electron.lnk") kullanıyor ve Electron logosu görünüyordu.
+// Paketlenmiş sürüm her açılışta kendi kısayolunu doğru simgeyle yeniden yazar.
+function ensureStartMenuShortcut() {
+  if (!app.isPackaged || process.platform !== 'win32') return;
+  try {
+    const lnk = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Panel.lnk');
+    shell.writeShortcutLink(lnk, 'create', {
+      target: process.execPath,
+      args: '--hidden',
+      icon: process.execPath,
+      iconIndex: 0,
+      appUserModelId: 'local.masaustu.panel',
+      description: 'Panel',
+    });
+  } catch {}
+}
+
+// ---------- Ayar güvenliği ----------
+// Sürüm yükseltmesi, yarım yazılmış/bozuk dosya ya da başka bir kaza ayarları (ses modelleri, yedek klasörü,
+// panel düzeni…) sıfırlayabiliyordu. Bu yüzden ayarlar her kayıtta iki yere daha aynalanır:
+//   • AppData\Panel\settings-yedek\son.json        (kurulumdan ve veri klasöründen bağımsız)
+//   • <yedek klasörü>\Panel yedekleri\ayarlar.json  (kullanıcının Drive vb. yedeğiyle birlikte gider)
+// Açılışta ayarlar bozuk/eksik ya da sadece varsayılanlardan ibaretse son sağlam kopyadan geri yüklenir.
+const snapDir = () => path.join(app.getPath('userData'), 'settings-yedek');
+const snapFile = () => path.join(snapDir(), 'son.json');
+const folderSnap = dir => path.join(backupRoot(dir), 'ayarlar.json');
+async function readJson(p) { try { return JSON.parse(await fs.readFile(p, 'utf8')); } catch { return null; } }
+// Kullanıcının kendi yaptığı hiçbir ayar yok mu (yalnızca varsayılanlar)?
+const isPristine = s => !s || (!s.layout && !s.backup?.dir && !s.city && !s.userName && !s.geminiApiKey);
+async function mirrorSettings(s) {
+  const copy = { ...s };
+  delete copy.weatherCache;   // büyük ve yeniden indirilebilir
+  const text = JSON.stringify(copy, null, 2);
+  await fs.mkdir(snapDir(), { recursive: true });
+  await writeAtomic(snapFile(), text);
+  if (s.backup?.dir) {
+    await fs.mkdir(backupRoot(s.backup.dir), { recursive: true });
+    await writeAtomic(folderSnap(s.backup.dir), text);
+  }
+}
+// Açılışta çağrılır: ayar dosyası bozuk/eksik/sıfırlanmışsa en güncel sağlam kopyadan geri yükler.
+async function recoverSettings() {
+  const cur = await readJson(settingsFile());
+  if (cur && !isPristine(cur)) return false;
+  const candidates = [];
+  const local = await readJson(snapFile());
+  if (local) candidates.push({ s: local, p: snapFile() });
+  const dir = cur?.backup?.dir || local?.backup?.dir;
+  if (dir) { const f = await readJson(folderSnap(dir)); if (f) candidates.push({ s: f, p: folderSnap(dir) }); }
+  const best = (await Promise.all(candidates.filter(c => !isPristine(c.s)).map(async c => ({ ...c, t: (await fs.stat(c.p)).mtimeMs }))))
+    .sort((a, b) => b.t - a.t)[0];
+  if (!best) return false;
+  // Bozuk dosya silinmez, yanına alınır
+  if (cur === null && await exists(settingsFile())) {
+    await fs.mkdir(snapDir(), { recursive: true });
+    await fs.copyFile(settingsFile(), path.join(snapDir(), `bozuk-${Date.now()}.json`)).catch(() => {});
+  }
+  await writeAtomic(settingsFile(), JSON.stringify({ ...(cur || {}), ...best.s }, null, 2));
+  return true;
+}
+// Sürüm değiştiyse (yükseltme) o ana kadarki ayarlar ayrıca saklanır ve hemen bir yedek alınır.
+async function onVersionChange() {
+  const s = await readSettings();
+  const v = app.getVersion();
+  if (s.lastRunVersion === v) return;
+  try {
+    await fs.mkdir(snapDir(), { recursive: true });
+    await fs.copyFile(settingsFile(), path.join(snapDir(), `surum-${s.lastRunVersion || 'ilk'}-oncesi.json`)).catch(() => {});
+    // en son 5 sürüm kopyası tutulur
+    const old = (await fs.readdir(snapDir())).filter(n => /^surum-.*-oncesi\.json$/.test(n)).sort();
+    for (const n of old.slice(0, -5)) await fs.rm(path.join(snapDir(), n), { force: true });
+  } catch {}
+  await writeSettings({ lastRunVersion: v });
+  if (s.backup?.enabled && s.backup?.dir) await backupNow();
 }
 
 // Ayar güncellemeleri sırayla uygulanır (arayüz ve zamanlayıcı aynı anda yazarsa biri kaybolmasın)
@@ -79,6 +159,7 @@ function writeSettings(patch) {
     const cur = await readSettings();
     const next = { ...cur, ...(typeof patch === 'function' ? patch(cur) : patch) };
     await writeAtomic(settingsFile(), JSON.stringify(next, null, 2));
+    mirrorSettings(next).catch(() => {});   // yedek başarısız olsa da ayar kaydı bozulmasın
     return next;
   });
   settingsQueue = run.catch(() => {});
@@ -241,39 +322,61 @@ const IMAGE_TYPES ={ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif'
 // Arayüz ses kaydını + o anki görev listesini (metin) gönderir; burada tek bir Gemini isteğine
 // dönüştürülür. Ses tanıma + anlama + muhakeme Gemini'de olur, yerel bir konuşma tanımaya gerek yoktur.
 // Cevap sesli okuma (TTS) tamamen yerelde/bedava kalır (bkz. src/js/assistant.js → speechSynthesis).
-const ASSISTANT_SYSTEM_PROMPT = `Senin adın SPARK. "Panel" adlı kişisel masaüstü uygulamasının sesli asistanısın. Kullanıcı Türkçe konuşuyor, sesini dinliyorsun.
-Sıcak, samimi ve KISA konuş. speech alanı Gemini sesiyle okunuyor ve süre uzunluğa göre artıyor: en fazla 1-2 kısa cümle (yaklaşık 20 kelime), doğal konuşma diliyle yaz (madde işareti, emoji, kısaltma yok; sayıları ve dereceleri okunuşuyla yaz).
-Her istekte sana bağlam metni veriliyor: şu anki tarih/saat, hava durumu ve görev listesi. Görevlerin başında [t12] gibi bir kimlik var; görevi değiştirirken task_id olarak yalnızca bu kimliklerden birini kullan, asla uydurma.
+const ASSISTANT_SYSTEM_PROMPT = `Senin adın SPARK. "Panel" adlı kişisel masaüstü uygulamasının sesli ve yazılı asistanısın. Kullanıcı Türkçe konuşuyor (ses) ya da yazıyor (metin).
+Sıcak, samimi ve KISA konuş. speech alanı en fazla 1-2 kısa cümle (yaklaşık 20 kelime) olsun; doğal konuşma diliyle yaz (madde işareti, emoji, kısaltma yok; sayıları ve dereceleri okunuşuyla yaz). Çok sayıda işlem yaptıysan tek tek sayma: "Üç görev ekledim, biri de tamamlandı." gibi özetle.
+Her istekte sana bağlam metni veriliyor: şu anki tarih/saat, hava durumu, görev listesi ve önceki konuşma. Önceki konuşmaya göre devam et ("onu da ekle", "bir de yarına al" gibi atıfları çöz). Görevlerin başında [t12] gibi bir kimlik var; görevi değiştirirken task_id olarak yalnızca bu kimliklerden birini kullan, asla uydurma.
 
 Yanıtını SADECE verilen JSON şemasına uygun, Türkçe olarak ver. type değerleri:
-- "add_task": yeni görev ekleme isteği VE kategori ya söylendi ya da context'teki "Önceki istek" notundan belli.
-  task_text: görevin kısa net metni (tarih/kategori ifadelerini metinden çıkar). due: varsa YYYY-AA-GG. rec: varsa tekrar kuralı ("her gün" / "hafta içi" / "her hafta" / "her N hafta" / "her ay" / "her yıl"). category: mevcut kategorilerden biri ya da kullanıcının söylediği yeni bir isim.
-- "need_category": görev ekleme isteği ama kategori söylenmedi ve "Önceki istek" notu da yok. task_text/due/rec'i yine doldur. speech: "Hangi kategoriye ekleyeyim?" gibi kısa bir soru.
-- "complete_task": var olan bir görevi yapıldı/tamamlandı işaretle. task_id zorunlu.
-- "reopen_task": yapılmış bir görevi tekrar yapılmadı yap. task_id zorunlu.
-- "delete_task": görevi sil (Silinenler'den geri getirilebilir). task_id zorunlu.
-- "update_task": var olan bir görevin metnini, tarihini ya da tekrarını değiştir. task_id zorunlu. Değişenleri doldur: new_text (yeni metin), due (YYYY-AA-GG; tarihi kaldırmak için "yok"), rec (tekrar kuralı; kaldırmak için "yok"). Değişmeyeni boş bırak.
-  Görevi belirlerken kullanıcının söylediği ifadeye en çok uyan TEK görevi seç. Birden fazla görev eşit derecede uyuyorsa ya da hiçbiri uymuyorsa değişiklik yapma: type "answer" ile hangisini kastettiğini kısaca sor.
-- "answer": soru ya da sohbet (görev değişikliği değil). Bağlamdaki görev listesi, hava durumu ve tarih/saate bakarak cevap ver. Belirli bir güne bağlı bir soruysa highlight_date alanına o tarihi (YYYY-AA-GG) yaz, değilse boş bırak. Hava durumu bilgisi bağlamda yoksa şehrin Ayarlar'dan seçilmediğini söyle.
+- "actions": kullanıcı görevler üzerinde bir ya da BİRDEN FAZLA işlem istiyor. Her işlemi actions dizisine ayrı bir öğe olarak yaz. Bir mesajda istediği kadar işlem olabilir ("yarın rapor yaz, cuma sunum hazırla ve süt almayı tamamla" → 3 öğe).
+  Öğe alanları (action zorunlu):
+  · action "add_task": yeni görev. task_text: kısa net görev metni (tarih/kategori/tekrar ifadelerini ve görevin kendisi olmayan "ekle", "not et", "görev olarak ekle" gibi ekleme komutunu metinden çıkar; saat bilgisi varsa metinde bırak, ör. "saat 14:00 dişçi randevusu"). due: varsa YYYY-AA-GG. rec: varsa tekrar kuralı ("her gün" / "hafta içi" / "her hafta" / "her N hafta" / "her ay" / "her yıl"). category: YALNIZCA kullanıcı kategoriyi açıkça söylediyse (ya da önceki konuşmada söylemişse) doldur — mevcut kategorilerden biri ya da söylediği yeni isim; söylemediyse boş bırak, tahmin etme; kullanıcı hepsi için tek kategori söylediyse her öğeye onu yaz.
+  · action "complete_task": task_id'li görevi yapıldı işaretle.
+  · action "reopen_task": yapılmış görevi tekrar yapılmadı yap.
+  · action "delete_task": görevi sil (Silinenler'den geri getirilebilir).
+  · action "update_task": task_id'li görevin new_text (yeni metin), due (YYYY-AA-GG; kaldırmak için "yok") ya da rec (kaldırmak için "yok") alanını değiştir; değişmeyeni boş bırak.
+  Mevcut bir görevi belirlerken söyleneni en iyi karşılayan TEK görevi seç. Emin olamıyorsan ya da birden fazla görev eşit uyuyorsa o işlemi yazma; type "answer" ile hangisini kastettiğini kısaca sor.
+  Kategori: kullanıcı yeni görev için kategori söylemediyse (ve önceki konuşmada belirtmediyse) görevi kendin bir kategoriye KOYMA; yalnızca tek bir aktif kategori varsa onu kullan, aksi halde type "need_category" ile sor.
+- "need_category": eklenecek görev(ler) var ama kategori söylenmedi, bağlamdaki "Önceki istek" notu da yok ve hangi kategoriye gideceği belli değil. Görevleri yine actions içine add_task olarak yaz (category boş) — actions boş KALMAMALI, kullanıcının istediği her görev orada olmalı.
+  Önceki konuşmada kullanıcı görev eklemek istediyse ve SPARK kategori sorduysa, kullanıcı şimdi sadece kategori söylese bile ("Kişisel", "ikisi de iş olsun") önceki mesajlardaki TÜM görevleri o kategoriyle actions'a add_task olarak yaz. speech: "Hangi kategoriye ekleyeyim?" gibi kısa bir soru.
+- "answer": soru ya da sohbet (görev değişikliği yok). Bağlamdaki görev listesi, hava durumu, tarih/saat ve önceki konuşmaya bakarak cevap ver. Belirli bir güne bağlı bir soruysa highlight_date alanına o tarihi (YYYY-AA-GG) yaz, değilse boş bırak. Hava durumu bilgisi bağlamda yoksa şehrin Ayarlar'dan seçilmediğini söyle.
 
-heard alanına kullanıcının söylediğini anladığın haliyle yaz.
+heard alanına kullanıcının söylediğini/yazdığını anladığın haliyle yaz.
 Anlayamadığın bir ses gelirse type "answer" ile nazikçe tekrar etmesini iste.`;
 const ASSISTANT_RESPONSE_SCHEMA = {
   type: 'object',
   properties: {
-    type: { type: 'string', enum: ['add_task', 'need_category', 'complete_task', 'reopen_task', 'delete_task', 'update_task', 'answer'] },
+    type: { type: 'string', enum: ['actions', 'need_category', 'answer'] },
     heard: { type: 'string' },
     speech: { type: 'string' },
-    task_text: { type: 'string' },
-    task_id: { type: 'string' },
-    new_text: { type: 'string' },
-    due: { type: 'string' },
-    rec: { type: 'string' },
-    category: { type: 'string' },
+    actions: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          action: { type: 'string', enum: ['add_task', 'complete_task', 'reopen_task', 'delete_task', 'update_task'] },
+          task_text: { type: 'string' },
+          task_id: { type: 'string' },
+          new_text: { type: 'string' },
+          due: { type: 'string' },
+          rec: { type: 'string' },
+          category: { type: 'string' },
+        },
+        required: ['action'],
+      },
+    },
     highlight_date: { type: 'string' },
   },
   required: ['type', 'speech'],
 };
+// Gemini isteği: takılırsa belirli süre sonra vazgeçilir (arayüz sonsuza kadar "düşünüyor"da kalmasın)
+async function geminiFetch(url, body, ms) {
+  try {
+    return await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(ms) });
+  } catch (e) {
+    if (e?.name === 'TimeoutError') throw new Error('Gemini zamanında yanıt vermedi, tekrar dene.');
+    throw e;
+  }
+}
 async function askAssistant(audioBytes, mimeType, contextText) {
   const s = await readSettings();
   if (!s.geminiApiKey) throw new Error('Gemini API anahtarı girilmemiş (Ayarlar → Sesli asistan).');
@@ -287,17 +390,28 @@ async function askAssistant(audioBytes, mimeType, contextText) {
     contents: [{ role: 'user', parts }],
     generationConfig: { responseMimeType: 'application/json', responseSchema: ASSISTANT_RESPONSE_SCHEMA },
   };
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    let msg = `Gemini isteği başarısız (${res.status})`;
-    try { msg = JSON.parse(errText)?.error?.message || msg; } catch {}
-    throw new Error(msg);
+  // Bağlantı ya da Gemini takılırsa 25 sn sonra vazgeçilir (arayüz sonsuza kadar "düşünüyor"da kalmasın).
+  // Model ara sıra bozuk/kesik JSON döndürebiliyor; bir kez daha denenir (kota: 1 istek daha)
+  let lastWhy = '';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const res = await geminiFetch(url, body, 25000);
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      let msg = `Gemini isteği başarısız (${res.status})`;
+      try { msg = JSON.parse(errText)?.error?.message || msg; } catch {}
+      throw new Error(msg);
+    }
+    const data = await res.json();
+    const cand = data?.candidates?.[0];
+    const text = cand?.content?.parts?.map(x => x.text || '').join('');
+    if (!text) { lastWhy = 'boş yanıt'; continue; }
+    try { return JSON.parse(text); } catch {}
+    // Çevresinde fazladan metin/kod bloğu varsa asıl JSON'u ayıkla
+    const obj = text.match(/\{[\s\S]*\}/)?.[0];
+    if (obj) { try { return JSON.parse(obj); } catch {} }
+    lastWhy = `çözümlenemedi (${cand?.finishReason || 'bilinmiyor'})`;
   }
-  const data = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!text) throw new Error('Gemini boş yanıt döndürdü (ses anlaşılamamış olabilir).');
-  try { return JSON.parse(text); } catch { throw new Error('Gemini yanıtı çözümlenemedi.'); }
+  throw new Error(`Gemini yanıtı ${lastWhy}; ses anlaşılamamış olabilir, tekrar dene.`);
 }
 
 // ---------- SPARK'ın sesi (Gemini TTS) ----------
@@ -322,7 +436,7 @@ async function geminiTts(text, voiceOverride) {
         speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceOverride || s.ttsVoice || 'Kore' } } },
       },
     };
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const res = await geminiFetch(url, body, 30000);
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
       if (res.status === 429 && /PerDay/i.test(errText)) ttsDayExhausted.set(model, today);
@@ -529,10 +643,13 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(async () => {
     await ensureData();
+    await recoverSettings().catch(() => {});
     registerIpc();
     // Sesli asistan mikrofon izni ister; Electron varsayılan olarak reddeder, burada izin veriyoruz
     // (Windows kendi "Mikrofona erişime izin ver" sorusunu ayrıca gösterir, bu ondan bağımsız).
     session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => callback(permission === 'media'));
+    ensureStartMenuShortcut();
+    await onVersionChange().catch(() => {});
     const settings = await readSettings();
     applyAutostart(settings.autostart);
     createWindow(settings, process.argv.includes('--hidden'));

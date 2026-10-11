@@ -18,6 +18,7 @@ Aşağıdaki davranış ilkeleri [multica-ai/andrej-karpathy-skills](https://git
 - `npm run build`: paketler. Değişiklik sonrası asgari doğrulama budur.
 - `npm start`: build + uygulamayı açar (elle doğrulama).
 - `npm run dist`: Windows NSIS kurulum paketi (`dist/v<sürüm>/` klasörüne).
+- `npm run backup`: veri klasörünü seçili yedekleme klasörüne (`Panel yedekleri/islem-oncesi/…`) kopyalar. `npm run dist` bunu kendiliğinden çalıştırır.
 - Otomatik test yok; "doğrulama" = build hatasız geçer + ilgili özellik uygulamada denenir.
 
 ## 1. Kodlamadan önce düşün
@@ -44,6 +45,12 @@ Aşağıdaki davranış ilkeleri [multica-ai/andrej-karpathy-skills](https://git
 - İlgisiz ölü kod görürsen belirt, silme.
 - Yalnızca KENDİ değişikliğinin sahipsiz bıraktığı import/değişken/fonksiyonu temizle.
 - Sınav: değiştirilen her satır doğrudan kullanıcının isteğine izlenebilmeli.
+
+## Veri güvenliği (zorunlu)
+
+- Kullanıcıdan bir iş (madde) alındığında, koda/veriye dokunmadan ÖNCE `npm run backup` çalıştır; çıktıdaki "Yedek alındı" satırını doğrula. Yedek alınamazsa işe başlama, kullanıcıya söyle.
+- Gerçek veri klasörüne (`%APPDATA%\Panel\data`) hiçbir zaman yazma; testleri `PANEL_PROFILE` + `--hidden` ile izole profilde yap, API anahtarı kopyalandıysa test profilini sil.
+- Ayarlar (`settings.json`) ana süreçte her kayıtta `AppData\Panel\settings-yedek\son.json` ve `<yedek klasörü>\Panel yedekleri\ayarlar.json` olarak aynalanır; bozuk/sıfırlanmış dosya açılışta buradan geri yüklenir (`main.js` → Ayar güvenliği).
 
 ## 4. Hedef odaklı yürütme
 

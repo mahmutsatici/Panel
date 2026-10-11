@@ -30,7 +30,7 @@ const fmtTime = new Intl.DateTimeFormat('tr-TR', { hour: '2-digit', minute: '2-d
 async function loadWeather(force = false) {
   const city = settings.city;
   if (!city) {
-    $('#wCity').textContent = 'Hava durumu';
+    $('#wCity').textContent = '';
     $('#wStamp').textContent = '';
     $('#wBody').innerHTML = '<p class="muted">⚙ Ayarlardan bir şehir seç.</p>';
     return;

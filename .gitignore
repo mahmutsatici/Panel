@@ -5,3 +5,5 @@ src/vendor/
 releases/
 graphify-out/
 Panel.lnk
+# Hata ayıklama sırasında yanlışlıkla oluşan veri kopyaları asla depoya girmesin
+Users*/
