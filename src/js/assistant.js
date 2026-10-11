@@ -1,45 +1,230 @@
-// ============ Sesli asistan ============
-// Mikrofon düğmesi / Ctrl+Alt+V ile kayıt başlar; durdurunca kayıt Gemini API'ye (ses + o anki
-// görev listesi) gönderilir. Gemini hem sesi anlıyor hem görev listesine bakıp cevap veriyor —
-// ayrı bir yerel konuşma tanımaya gerek yok. Cevabı sesli okumak (TTS) tamamen yerelde/bedava:
-// Windows'un kendi speechSynthesis'i kullanılır, hiçbir ses dışarı gönderilmez.
+// ============ SPARK (sesli asistan) ============
+// Mikrofon düğmesi / SPARK kartındaki düğme / Ctrl+Alt+V ile kayıt başlar; tekrar basınca durur ve
+// kayıt Gemini API'ye (ses + o anki görev listesi) gönderilir. Gemini hem sesi anlıyor hem görev
+// listesine bakıp cevap veriyor — ayrı bir yerel konuşma tanımaya gerek yok.
+//
+// Cevabın sesi: önce Gemini TTS (gerçekçi, seçilebilir ses tonları). Kota dolarsa ya da bağlantı
+// yoksa otomatik olarak Windows'un yerel sesine (Tolga) düşülür; SPARK hiçbir durumda susmaz.
 //
 // Akış: kayıt → WAV'a çevir → api.assistant.ask(ses, bağlam) → Gemini JSON döner:
 //   add_task       → görev eklenir, sesli onaylanır
 //   need_category  → sesli sorulur, mikrofon tekrar açılıp kategori cevabı beklenir
 //   answer         → sesli + yazılı cevaplanır; belirli bir güne bağlıysa takvimde o gün açılır
-let asState = 'idle';   // idle | listening | thinking
+//
+// Görünüm: SPARK kartı yerleşimde görünürken her şey kartta olur (küre + konuşma geçmişi).
+// Kart gizliyse aynı etkileşim üst çubuğun altında açılan küçük pencerede gösterilir.
+
+// Gemini'nin hazır sesleri (Ayarlar → SPARK → Ses tonu). Açıklamalar Google'ın ses tarifleridir.
+const SPARK_VOICES = [
+  ['Kore', 'Kararlı'], ['Zephyr', 'Parlak'], ['Puck', 'Neşeli'], ['Charon', 'Bilgilendirici'],
+  ['Fenrir', 'Heyecanlı'], ['Leda', 'Genç'], ['Orus', 'Kararlı'], ['Aoede', 'Ferah'],
+  ['Callirrhoe', 'Rahat'], ['Autonoe', 'Parlak'], ['Enceladus', 'Nefesli'], ['Iapetus', 'Net'],
+  ['Umbriel', 'Rahat'], ['Algieba', 'Yumuşak'], ['Despina', 'Yumuşak'], ['Erinome', 'Net'],
+  ['Algenib', 'Boğuk'], ['Rasalgethi', 'Bilgilendirici'], ['Laomedeia', 'Neşeli'], ['Achernar', 'Yumuşak'],
+  ['Alnilam', 'Sert'], ['Schedar', 'Dengeli'], ['Gacrux', 'Olgun'], ['Pulcherrima', 'Atılgan'],
+  ['Achird', 'Samimi'], ['Zubenelgenubi', 'Gündelik'], ['Vindemiatrix', 'Nazik'], ['Sadachbia', 'Canlı'],
+  ['Sadaltager', 'Bilgili'], ['Sulafat', 'Sıcak'],
+];
+
+let asState = 'idle';   // idle | listening | thinking | speaking | added | asking | answer | error
 let mediaStream = null, mediaRecorder = null, audioChunks = [];
+let voicePrep = false;  // cevabın sesi hazırlanıyor (yazı ekranda; kullanıcı araya girebilir)
 let pending = null;     // need_category sorusundan sonra bir sonraki kayda eklenecek bağlam notu
 let autoCloseTimer = null;
 let recordTimeout = null;
+let sparkLog = store.get('sparkLog', []);   // konuşma geçmişi (son 30 konuşma, bu bilgisayarda)
 
 const asPop = $('#assistantPop');
+const sparkCardVisible = () => !!document.querySelector('.card[data-card="spark"]')?.offsetParent;
 
-// --- Metni sesli oku (yerelde/bedava), konuşma bitince dönen bir söz verir.
-// need_category akışında mikrofonu kendi sesimiz bitmeden açmamak, kendi sesimizin mikrofona
-// karışmasını (ve Gemini'yi yanıltmasını) önlüyor.
-function speak(text) {
+// ============ Küre animasyonu ============
+// Birkaç yarı saydam "dalga" katmanı üst üste çizilir; boyutu ve dalgalanması anlık ses seviyesine
+// göre değişir. Ses seviyesi dinlerken mikrofondan, konuşurken SPARK'ın kendi sesinden gerçek zamanlı
+// ölçülür (AnalyserNode). Windows sesine düşüldüğünde ses verisine erişilemediği için seviye,
+// konuşulan her kelimede (boundary olayı) kısa bir vuruşla taklit edilir.
+const orb = { level: 0, target: 0, t: 0, analyser: null, buf: null, fakeUntil: 0 };
+const hexRgb = hex => {
+  const m = hex.trim().replace('#', '').match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i);
+  return m ? m.slice(1).map(h => parseInt(h, 16)) : [123, 147, 255];
+};
+const rgba = ([r, g, b], a) => `rgba(${r},${g},${b},${a})`;
+function orbPalette() {
+  const css = getComputedStyle(document.documentElement);
+  const accent = hexRgb(css.getPropertyValue('--accent')), danger = hexRgb(css.getPropertyValue('--danger'));
+  if (asState === 'listening') return [danger, [255, 140, 170], [255, 190, 120]];
+  if (asState === 'error') return [danger, danger, [140, 140, 150]];
+  return [accent, [139, 92, 246], [56, 189, 248]];
+}
+function drawOrb(cv, pal) {
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (!w || !h) return;
+  const dpr = devicePixelRatio || 1;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const cx = w / 2, cy = h / 2, L = orb.level, t = orb.t;
+  const thinking = asState === 'thinking';
+  const breathe = asState === 'idle' || asState === 'added' || asState === 'answer' ? Math.sin(t * 1.3) * 0.04 : 0;
+  const R = Math.min(w, h) * 0.3 * (1 + breathe + L * 0.32);
+
+  // Dış ışıma
+  // Işıma tuvalin kenarından önce sönmeli; yoksa kenarda kesik bir çizgi görünür
+  const glow = ctx.createRadialGradient(cx, cy, R * 0.3, cx, cy, Math.min(R * 1.9, Math.min(w, h) / 2));
+  glow.addColorStop(0, rgba(pal[0], 0.28 + L * 0.3));
+  glow.addColorStop(1, rgba(pal[0], 0));
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, w, h);
+
+  // Dalgalanan katmanlar (üst üste toplanarak parlayan bir küre oluşturur)
+  ctx.globalCompositeOperation = 'lighter';
+  const amp = 0.04 + L * 0.22 + (thinking ? 0.07 : 0);
+  const speed = thinking ? 2.6 : 1 + L * 2;
+  for (let k = 0; k < 3; k++) {
+    ctx.beginPath();
+    for (let i = 0; i <= 72; i++) {
+      const a = (i / 72) * Math.PI * 2;
+      const wob = Math.sin(3 * a + t * speed * (1 + k * 0.35) + k * 2.1) * 0.5
+        + Math.sin(5 * a - t * speed * 0.8 + k * 1.3) * 0.3
+        + Math.sin(2 * a + t * speed * 0.5 + k) * 0.2;
+      const r = R * (0.86 + amp * wob);
+      const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r;
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+    const g = ctx.createRadialGradient(cx - R * 0.3, cy - R * 0.35, R * 0.1, cx, cy, R * 1.05);
+    g.addColorStop(0, rgba([255, 255, 255], 0.5));
+    g.addColorStop(0.35, rgba(pal[k], 0.55));
+    g.addColorStop(1, rgba(pal[k], 0.08));
+    ctx.fillStyle = g;
+    ctx.fill();
+  }
+  ctx.globalCompositeOperation = 'source-over';
+}
+let lastFrame = 0;
+function orbLoop(ts) {
+  const dt = Math.min(0.05, (ts - lastFrame) / 1000 || 0);
+  lastFrame = ts;
+  orb.t += dt;
+  // Ses seviyesi: gerçek ses varsa ondan, yoksa (Windows sesi) kelime vuruşlarından
+  if (orb.analyser) {
+    orb.analyser.getByteTimeDomainData(orb.buf);
+    let sum = 0;
+    for (let i = 0; i < orb.buf.length; i++) { const v = (orb.buf[i] - 128) / 128; sum += v * v; }
+    orb.target = Math.min(1, Math.sqrt(sum / orb.buf.length) * 4.5);
+  } else if (performance.now() < orb.fakeUntil) {
+    orb.target = Math.max(orb.target * 0.9, 0.15);
+  } else {
+    orb.target *= 0.9;
+  }
+  // Yükselirken hızlı, düşerken yumuşak (konuşma gibi görünsün diye)
+  orb.level += (orb.target - orb.level) * (orb.target > orb.level ? 0.45 : 0.12);
+  const pal = orbPalette();
+  $$('.spark-orb').forEach(cv => { if (cv.offsetParent) drawOrb(cv, pal); });
+  requestAnimationFrame(orbLoop);
+}
+requestAnimationFrame(orbLoop);
+
+// ============ Konuşma (ses çıkışı) ============
+let playCtx = null, playSource = null, speakToken = 0;
+function stopSpeaking() {
+  speakToken++;   // henüz hazırlanmakta olan bir ses varsa çalınmasın
+  try { playSource?.stop(); } catch {}
+  playSource = null;
+  orb.analyser = null;
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+}
+// Gemini'den gelen ham PCM'i (16 bit, tek kanal) çalar; çalarken küre sesin gerçek seviyesini izler.
+function playPcm(bytes, rate) {
+  playCtx ||= new AudioContext();
+  const copy = new Uint8Array(bytes);   // hizalı yeni bir tampon (Int16Array için)
+  const samples = new Int16Array(copy.buffer, 0, copy.length >> 1);
+  const buf = playCtx.createBuffer(1, samples.length, rate);
+  const ch = buf.getChannelData(0);
+  for (let i = 0; i < samples.length; i++) ch[i] = samples[i] / 32768;
+  const src = playCtx.createBufferSource();
+  src.buffer = buf;
+  const an = playCtx.createAnalyser();
+  an.fftSize = 1024;
+  src.connect(an);
+  an.connect(playCtx.destination);
+  orb.analyser = an;
+  orb.buf = new Uint8Array(an.fftSize);
+  playSource = src;
   return new Promise(resolve => {
-    if (!text || !('speechSynthesis' in window)) return resolve();
-    speechSynthesis.cancel();
+    src.onended = () => { if (playSource === src) { playSource = null; orb.analyser = null; } resolve(); };
+    playCtx.resume().then(() => src.start());
+  });
+}
+// Yedek: Windows'un yerel sesi. Ses verisine erişilemediği için küre her kelimede kısa bir vuruş yapar.
+function speakLocal(text) {
+  return new Promise(resolve => {
+    if (!('speechSynthesis' in window)) return resolve();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'tr-TR';
     const trVoice = speechSynthesis.getVoices().find(v => v.lang?.toLowerCase().startsWith('tr'));
     if (trVoice) u.voice = trVoice;
+    u.onboundary = () => { orb.target = 0.55 + Math.random() * 0.35; orb.fakeUntil = performance.now() + 180; };
     u.onend = resolve;
     u.onerror = resolve;
     speechSynthesis.speak(u);
   });
 }
+// Metni sesli söyler, konuşma bitince döner. need_category akışında mikrofonu SPARK'ın sözü bitmeden
+// açmamak, kendi sesinin mikrofona karışmasını (ve Gemini'yi yanıltmasını) önler.
+// Döndürdüğü değer hangi sesin kullanıldığıdır: 'gemini' ya da 'yerel'.
+// onStart: ses gerçekten çalmaya başlarken çağrılır (Gemini sesi hazırlanırken birkaç saniye geçebilir).
+async function speak(text, voice, onStart) {
+  if (!text) return null;
+  stopSpeaking();
+  const token = speakToken;
+  if (settings.ttsEnabled !== false && settings.geminiApiKey) {
+    try {
+      const { pcm, sampleRate } = await api.assistant.speak(text, voice);
+      if (token !== speakToken) return null;   // hazırlanırken kapatıldı / yeni kayda geçildi
+      onStart?.();
+      await playPcm(pcm, sampleRate);
+      return 'gemini';
+    } catch (err) {
+      if (token !== speakToken) return null;
+      console.warn('SPARK: Gemini sesi kullanılamadı, Windows sesine dönülüyor —', cleanErr(err));
+    }
+  }
+  onStart?.();
+  await speakLocal(text);
+  return 'yerel';
+}
 
-// --- O anki görev listesini Gemini'nin okuyacağı düz metne çevir (mevcut taskLine'ı kullanır) ---
+// ============ Görev listesi bağlamı ============
+// Gemini'ye giden bağlam: tarih/saat, hava durumu ve kimlikli görev listesi. Görevlerin başındaki
+// [t3] gibi kimlikler, Gemini'nin "şu görevi tamamla" derken hangisini kastettiğini bildirmesi içindir.
+let ctxTasks = new Map();   // kimlik → { cat, task } (yalnızca o anki istek için geçerli)
+const WEATHER_DESC = c => wmo(c, true)[1];
+function weatherContext() {
+  const city = settings.city, w = settings.weatherCache;
+  if (!city) return 'Hava durumu: şehir seçilmemiş.';
+  if (!w || w.lat !== city.lat || w.lon !== city.lon) return `Hava durumu: ${city.name} için veri henüz alınmadı.`;
+  const c = w.data.current, d = w.data.daily, r = Math.round;
+  const lines = [`Hava durumu (${city.name}, güncelleme ${fmtTime.format(new Date(w.at))}):`,
+    `- Şu an: ${WEATHER_DESC(c.weather_code)}, ${r(c.temperature_2m)}°C (hissedilen ${r(c.apparent_temperature)}°C), nem %${c.relative_humidity_2m}, rüzgar ${r(c.wind_speed_10m)} km/s`];
+  d.time.forEach((t, i) => {
+    const name = i === 0 ? 'Bugün' : i === 1 ? 'Yarın' : fmtWeekday.format(new Date(t + 'T12:00'));
+    const rain = d.precipitation_probability_max?.[i];
+    lines.push(`- ${name} (${t}): ${WEATHER_DESC(d.weather_code[i])}, en düşük ${r(d.temperature_2m_min[i])}°C, en yüksek ${r(d.temperature_2m_max[i])}°C${rain != null ? `, yağış ihtimali %${rain}` : ''}`);
+  });
+  return lines.join('\n');
+}
 function tasksContext() {
-  const today = todayISO();
-  const lines = [`Bugünün tarihi: ${today} (${fmtLongDay.format(parseISODate(today))})`, '', 'Görev listesi:'];
+  const now = new Date(), today = todayISO();
+  const lines = [`Şu an: ${today} (${fmtLongDay.format(parseISODate(today))}) saat ${fmtTime.format(now)}`, '', weatherContext(), '', 'Görev listesi:'];
+  ctxTasks = new Map();
+  let n = 0;
   for (const cat of activeCats()) {
     lines.push(`## ${cat.name}`);
-    for (const t of cat.tasks) lines.push(taskLine(t));
+    for (const t of cat.tasks) {
+      const id = `t${++n}`;
+      ctxTasks.set(id, { cat, task: t });
+      lines.push(`[${id}] ${taskLine(t)}`);
+    }
   }
   if (pending) {
     lines.push('', `Önceki istek: kullanıcı "${pending.text}" görevini eklemek istiyor` +
@@ -59,20 +244,70 @@ function resolveCategory(name) {
   return activeCats().find(c => c.name === clean);
 }
 
-// --- Kayıt: MediaRecorder ile al, Gemini'nin güvenilir kabul ettiği WAV'a çevir ---
+// ============ Ses kaydı ============
+let micCtx = null;
 async function startRecording() {
   mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
   audioChunks = [];
   mediaRecorder = new MediaRecorder(mediaStream);
   mediaRecorder.ondataavailable = e => { if (e.data.size) audioChunks.push(e.data); };
   mediaRecorder.start();
+  // Dinlerken küre mikrofondaki sesin seviyesine tepki versin
+  micCtx = new AudioContext();
+  const an = micCtx.createAnalyser();
+  an.fftSize = 1024;
+  micCtx.createMediaStreamSource(mediaStream).connect(an);
+  orb.analyser = an;
+  orb.buf = new Uint8Array(an.fftSize);
+  startSilenceWatch(an);
   // Unutulursa sonsuza kadar dinlemesin / kotayı boşuna harcamasın
   recordTimeout = setTimeout(() => { if (asState === 'listening') stopAndSend(); }, 20000);
+}
+// Sessizlik algılama: konuşma başladıktan sonra ayardaki süre kadar sessizlik olursa kayıt kendiliğinden
+// gönderilir; hiç konuşulmazsa 8 saniye sonra vazgeçilir (boş sesle kota harcanmasın).
+// Eşik, kaydın ilk yarım saniyesindeki ortam gürültüsüne göre ayarlanır.
+let silenceTimer = null;
+function startSilenceWatch(an) {
+  const quietMs = Number(settings.sparkSilenceMs ?? 1500);
+  if (!quietMs) return;
+  const buf = new Uint8Array(an.fftSize);
+  const t0 = performance.now();
+  let noise = 0, spoke = false, lastLoud = t0, loudMs = 0, prev = t0;
+  silenceTimer = setInterval(() => {
+    const now = performance.now(), dt = now - prev;
+    prev = now;
+    an.getByteTimeDomainData(buf);
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) { const v = (buf[i] - 128) / 128; sum += v * v; }
+    const rms = Math.sqrt(sum / buf.length);
+    if (now - t0 < 500) { noise = Math.max(noise, rms); return; }
+    const loud = rms > Math.max(0.02, noise * 2.5);
+    if (loud) { lastLoud = now; loudMs += dt; if (loudMs > 150) spoke = true; }
+    if (spoke && now - lastLoud > quietMs) { stopSilenceWatch(); stopAndSend(); }
+    else if (!spoke && now - t0 > 8000) { stopSilenceWatch(); cancelListening('Ses duymadım.'); }
+  }, 60);
+}
+function stopSilenceWatch() { clearInterval(silenceTimer); silenceTimer = null; }
+// Dinleme boşa çıktı: hiçbir şey gönderilmez, panel kapanır
+function cancelListening(msg) {
+  clearTimeout(recordTimeout);
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') { mediaRecorder.onstop = null; mediaRecorder.stop(); }
+  releaseMic();
+  showExchange('', msg);
+  setState('idle');
+  autoCloseTimer = setTimeout(() => { if (asState === 'idle' && !sparkCardVisible()) closeAssistant(); }, 2500);
+}
+function releaseMic() {
+  stopSilenceWatch();
+  orb.analyser = null;
+  micCtx?.close();
+  micCtx = null;
+  mediaStream?.getTracks().forEach(t => t.stop());
 }
 function stopRecordingRaw() {
   return new Promise(resolve => {
     mediaRecorder.onstop = () => {
-      mediaStream.getTracks().forEach(t => t.stop());
+      releaseMic();
       resolve(new Blob(audioChunks, { type: mediaRecorder.mimeType }));
     };
     mediaRecorder.stop();
@@ -82,123 +317,203 @@ function stopRecordingRaw() {
 // Kaydedilen sesi (webm/opus) tek kanallı 16 bit PCM WAV'a çevirir — Gemini'nin her sürümde
 // güvenilir kabul ettiği biçim budur, tarayıcının kendi kayıt biçimine bağımlı kalmayalım diye.
 async function blobToWav(blob) {
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  const audioBuffer = await ctx.decodeAudioData(await blob.arrayBuffer());
-  const rate = audioBuffer.sampleRate;
-  let data = audioBuffer.getChannelData(0);
-  if (audioBuffer.numberOfChannels > 1) {
-    const ch1 = audioBuffer.getChannelData(1), mono = new Float32Array(data.length);
-    for (let i = 0; i < data.length; i++) mono[i] = (data[i] + ch1[i]) / 2;
-    data = mono;
-  }
+  const ctx = new AudioContext();
+  const decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
+  ctx.close();
+  // 16 kHz tek kanala indir: konuşma tanıma için yeterli, yükleme birkaç kat küçük (yanıt daha hızlı gelir)
+  const RATE = 16000;
+  const off = new OfflineAudioContext(1, Math.max(1, Math.ceil(decoded.duration * RATE)), RATE);
+  const src = off.createBufferSource();
+  src.buffer = decoded;
+  src.connect(off.destination);
+  src.start();
+  const data = (await off.startRendering()).getChannelData(0);
   const buf = new ArrayBuffer(44 + data.length * 2);
   const view = new DataView(buf);
-  const str = (off, s) => { for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i)); };
+  const str = (o, t) => { for (let i = 0; i < t.length; i++) view.setUint8(o + i, t.charCodeAt(i)); };
   str(0, 'RIFF'); view.setUint32(4, 36 + data.length * 2, true); str(8, 'WAVE');
   str(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true); view.setUint32(24, rate, true);
-  view.setUint32(28, rate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  view.setUint16(22, 1, true); view.setUint32(24, RATE, true);
+  view.setUint32(28, RATE * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
   str(36, 'data'); view.setUint32(40, data.length * 2, true);
-  let off = 44;
-  for (let i = 0; i < data.length; i++, off += 2) {
-    const s = Math.max(-1, Math.min(1, data[i]));
-    view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  let o = 44;
+  for (let i = 0; i < data.length; i++, o += 2) {
+    const v = Math.max(-1, Math.min(1, data[i]));
+    view.setInt16(o, v < 0 ? v * 0x8000 : v * 0x7fff, true);
   }
-  ctx.close();
   return new Uint8Array(buf);
 }
 
-// --- Panel: durum göstergesi ---
+// ============ Görünüm: durum, küçük pencere, konuşma geçmişi ============
 const STATE_LABELS = {
-  listening: '🎙️ Dinliyor… (bitirmek için tekrar tıkla)', thinking: 'Düşünüyor…',
-  added: 'Eklendi ✓', asking: 'Soru', answer: 'Cevap', error: '⚠ Sorun oluştu',
+  idle: 'hazır', listening: 'dinliyor…', thinking: 'düşünüyor…', speaking: 'konuşuyor…',
+  added: 'eklendi ✓', done: 'tamam ✓', asking: 'soruyor', answer: 'cevap verdi', error: 'bir sorun oluştu',
 };
-function showPanel(state, label) {
+const listeningLabel = () => (Number(settings.sparkSilenceMs ?? 1500) ? 'dinliyor… (sustuğunda gönderilir)' : 'dinliyor… (bitirmek için tekrar bas)');
+function setState(state, label) {
   clearTimeout(autoCloseTimer);
   asState = state;
-  asPop.hidden = false;
-  $('#micBtn').classList.toggle('listening', state === 'listening');
-  $('#micBtn').classList.toggle('busy', state === 'thinking');
-  $('#asState').textContent = label || STATE_LABELS[state] || '';
+  const text = label || STATE_LABELS[state] || '';
+  $$('.spark-state').forEach(el => { el.textContent = text; el.dataset.state = state; });
+  for (const b of [$('#micBtn'), $('#sparkMic')]) {
+    b.classList.toggle('listening', state === 'listening');
+    b.classList.toggle('busy', state === 'thinking' || state === 'speaking');
+  }
+  // Kart görünmüyorsa etkileşimi küçük pencerede göster
+  if (state !== 'idle' && !sparkCardVisible()) asPop.hidden = false;
+}
+function showExchange(heard, answer) {
+  $('#asHeard').textContent = heard ? `"${heard}"` : '';
+  $('#asAnswer').textContent = answer || '';
+}
+const fmtLogTime = new Intl.DateTimeFormat('tr-TR', { hour: '2-digit', minute: '2-digit' });
+function renderLog() {
+  const ul = $('#sparkLog');
+  if (!sparkLog.length) {
+    ul.innerHTML = '<li class="spark-empty">Mikrofona basıp konuş: "yarın rapor yaz ekle iş kategorisine" ya da "bugün neler var?"</li>';
+    return;
+  }
+  ul.innerHTML = sparkLog.map(e => `
+    ${e.heard ? `<li class="msg me"><span>${esc(e.heard)}</span></li>` : ''}
+    <li class="msg spark ${e.kind}"><span>${esc(e.answer)}</span><time>${fmtLogTime.format(new Date(e.at))}</time></li>`).join('');
+  ul.scrollTop = ul.scrollHeight;
+}
+function addLog(heard, answer, kind) {
+  sparkLog.push({ at: Date.now(), heard: heard || '', answer: answer || '', kind });
+  sparkLog = sparkLog.slice(-30);
+  store.set('sparkLog', sparkLog);
+  renderLog();
 }
 function closeAssistant() {
   clearTimeout(autoCloseTimer);
+  clearTimeout(recordTimeout);
   asPop.hidden = true;
-  $('#micBtn').classList.remove('listening', 'busy');
-  asState = 'idle';
   pending = null;
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  stopSpeaking();
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') { mediaRecorder.onstop = null; mediaRecorder.stop(); }
+  releaseMic();
+  setState('idle');
 }
+// Sonuç gösterilirken dışarı tıklamak küçük pencereyi kapatır; kayıt/düşünme/konuşma sürerken kesmez
 document.addEventListener('mousedown', e => {
-  // Kayıt sürerken ya da cevap beklenirken dışarı tıklamak kesmesin; sadece sonuç gösterilirken kapatsın
-  if (!asPop.hidden && asState !== 'listening' && asState !== 'thinking' && !e.target.closest('#assistantPop, #micBtn')) closeAssistant();
+  if (asPop.hidden || ['listening', 'thinking', 'speaking'].includes(asState)) return;
+  if (!e.target.closest('#assistantPop, #micBtn, #sparkMic')) closeAssistant();
 });
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && !asPop.hidden) closeAssistant(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && asState !== 'idle') closeAssistant(); });
 $('#asClose').onclick = closeAssistant;
+$('#sparkClear').onclick = () => { sparkLog = []; store.set('sparkLog', sparkLog); renderLog(); };
 
-// --- Ana akış ---
+// ============ Ana akış ============
 async function toggleListening() {
   if (asState === 'listening') return stopAndSend();
-  if (asState === 'thinking') return;   // cevap beklenirken yeni kayda başlama
+  if (asState === 'thinking' && !voicePrep) return;   // cevap beklenirken yeni kayda başlama (ses hazırlanırken serbest)
+  stopSpeaking();                         // SPARK konuşurken basılırsa sözünü kesip dinlemeye geç
   try {
     await startRecording();
-    showPanel('listening');
-    $('#asHeard').textContent = '';
-    $('#asAnswer').textContent = '';
+    showExchange('', '');
+    setState('listening', listeningLabel());
+    loadWeather().catch(() => {});   // süresi dolmuşsa konuşurken tazelenir; soru sorulunca bağlamda güncel olsun
   } catch {
-    showPanel('error');
-    $('#asAnswer').textContent = 'Mikrofona erişilemedi. Windows ayarlarından Panel\'e mikrofon izni verildiğinden emin ol.';
+    showExchange('', 'Mikrofona erişilemedi. Windows ayarlarından Panel\'e mikrofon izni verildiğinden emin ol.');
+    setState('error');
   }
 }
 async function stopAndSend() {
   clearTimeout(recordTimeout);
-  showPanel('thinking');
+  setState('thinking');
   const blob = await stopRecordingRaw();
   try {
     const wav = await blobToWav(blob);
     const res = await api.assistant.ask(wav, 'audio/wav', tasksContext());
-    handleResponse(res);
+    await handleResponse(res);
   } catch (err) {
     const msg = cleanErr(err);
-    $('#asHeard').textContent = '';
-    $('#asAnswer').textContent = msg;
-    speak(`Bir sorun oluştu: ${msg}`);
-    showPanel('error');
-    autoCloseTimer = setTimeout(closeAssistant, 6000);
+    showExchange('', msg);
+    addLog('', msg, 'error');
+    setState('error');
+    await speakLocal(`Bir sorun oluştu. ${msg}`);
+    autoCloseTimer = setTimeout(closeAssistant, 5000);
   }
 }
 
+// Gemini'nin mevcut görevler üzerinde yapabildiği işlemler (todos.js'teki aynı fonksiyonlar kullanılır,
+// böylece elle yapılan işlemle birebir aynı sonucu verir: tekrarlayan görev, silinenler işareti vb.)
+const TASK_ACTIONS = new Set(['complete_task', 'reopen_task', 'delete_task', 'update_task']);
+async function applyTaskAction(type, { cat, task }, res) {
+  if (type === 'complete_task') return setDone(cat, task, true);
+  if (type === 'reopen_task') return setDone(cat, task, false);
+  if (type === 'delete_task') { deleteTask(cat, task); return saveTodos(); }
+  // update_task: yalnızca Gemini'nin doldurduğu alanlar değişir; "yok" ilgili alanı kaldırır
+  if (res.new_text?.trim()) task.text = res.new_text.trim();
+  if (res.due) task.due = /^yok$/i.test(res.due) ? undefined : res.due;
+  if (res.rec) task.rec = /^yok$/i.test(res.rec) ? undefined : res.rec;
+  return saveTodos();
+}
+
 async function handleResponse(res) {
-  $('#asHeard').textContent = res.heard ? `"${res.heard}"` : '';
-  $('#asAnswer').textContent = res.speech || '';
+  if (asState !== 'thinking') return;   // kullanıcı bu arada kapattıysa sonucu uygulama
+  showExchange(res.heard, res.speech);
 
   if (res.type === 'need_category') {
     pending = { text: res.task_text || '', due: res.due || null, rec: res.rec || null };
-    showPanel('asking');
-    await speak(res.speech);
-    // Soru bitince mikrofonu otomatik aç; hâlâ "asking" durumundaysak (kullanıcı araya girip
-    // kapatmadıysa) kaydı başlat.
-    if (asState === 'asking') toggleListening();
+    addLog(res.heard, res.speech, 'asking');
+    setState('thinking');                 // ses hazırlanırken
+    const voice = await sayAndShow(res.speech, 'asking');
+    // Soru bitince mikrofonu otomatik aç (kullanıcı araya girip kapatmadıysa)
+    if (asState === 'asking' && voice !== null) toggleListening();
     return;
   }
 
   pending = null;
+  let finalState = 'answer', speech = res.speech;
   if (res.type === 'add_task' && res.task_text) {
     const cat = resolveCategory(res.category);
     selectCat(cat.name);
     addTask(cat, res.task_text, res.due || null, res.rec || null);
-    showPanel('added');
-  } else {
-    if (res.highlight_date) openCalDay(res.highlight_date);
-    showPanel('answer');
+    finalState = 'added';
+  } else if (TASK_ACTIONS.has(res.type)) {
+    const target = ctxTasks.get(res.task_id);
+    // Görev bu arada silinmiş/değişmişse (ya da kimlik hatalıysa) hiçbir şeye dokunma
+    if (target && target.cat.tasks.includes(target.task)) {
+      await applyTaskAction(res.type, target, res);
+      finalState = 'done';
+    } else {
+      speech = 'Hangi görevi kastettiğinden emin olamadım, tekrar söyler misin?';
+      showExchange(res.heard, speech);
+    }
+  } else if (res.highlight_date) {
+    openCalDay(res.highlight_date);
   }
-  await speak(res.speech);
-  autoCloseTimer = setTimeout(closeAssistant, 4000);
+  addLog(res.heard, speech, finalState);
+  await sayAndShow(speech, finalState);
+  if (asState === finalState) autoCloseTimer = setTimeout(() => { if (!sparkCardVisible()) closeAssistant(); else setState('idle'); }, 4000);
+}
+// Cevabı seslendir; konuşurken durum "konuşuyor", bitince verilen son durum. Windows sesine
+// düşüldüyse bunu durum yazısında belirt (kota dolduğunu kullanıcı anlasın).
+async function sayAndShow(text, endState) {
+  // Gemini sesi birkaç saniyede hazırlanır; yazı ekranda zaten görünüyor, durum bunu belirtsin
+  setState('thinking', 'ses hazırlanıyor…');
+  voicePrep = true;
+  const used = await speak(text, undefined, () => { voicePrep = false; setState('speaking'); });
+  voicePrep = false;
+  if (asState !== 'speaking') return null;   // bu arada kapatıldı / sözü kesildi
+  setState(endState, used === 'yerel' && settings.ttsEnabled !== false && settings.geminiApiKey
+    ? `${STATE_LABELS[endState]} · yedek ses` : undefined);
+  return used;
 }
 
-$('#micBtn').onclick = toggleListening;
+// Ayarlar → SPARK → "Dinle": seçili ses tonuyla örnek cümle (kota kullanır)
+async function previewVoice(voice) {
+  setState('speaking');
+  await speak('Merhaba, ben SPARK. Bugün neler yapmak istersin?', voice);
+  setState('idle');
+}
+
+for (const b of [$('#micBtn'), $('#sparkMic')]) b.onclick = toggleListening;
 api.assistant.onTrigger(toggleListening);
 document.addEventListener('keydown', e => {
   // Ctrl+Alt+V global kısayolun yanında, pencere odaktayken de çalışsın
   if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'v') { e.preventDefault(); toggleListening(); }
 });
+renderLog();
+setState('idle');

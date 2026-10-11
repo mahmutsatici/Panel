@@ -18,7 +18,7 @@
       <button type="button" class="tb-btn" id="layoutReset" title="Varsayılan düzene dön">↺ Varsayılan</button>
     </div>
     <div class="tb-actions">
-      <button type="button" class="tb-btn icon" id="micBtn" title="Sesli asistan (Ctrl+Alt+V)">🎙️</button>
+      <button type="button" class="tb-btn icon" id="micBtn" title="SPARK ile konuş (Ctrl+Alt+V)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.5 21h7"/></svg></button>
       <button type="button" class="tb-btn" id="editLayout" title="Kartları taşı, gizle, boyutlandır">▦ Düzenle</button>
       <button type="button" class="tb-btn icon" id="openSettings" title="Ayarlar">⚙</button>
     </div>
@@ -34,6 +34,23 @@
       <div class="time" id="time">--:--</div>
       <div class="date" id="date"></div>
       <div class="sub" id="dayInfo"></div>
+    </section>
+
+    <!-- SPARK: sesli asistan kartı (küre animasyonu + konuşma geçmişi; js/assistant.js) -->
+    <section class="card spark" data-card="spark">
+      <div class="card-head">
+        <h2>SPARK <span class="spark-state"></span></h2>
+        <div class="actions">
+          <button class="icon-btn" id="sparkClear" title="Konuşma geçmişini temizle"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12.2a1 1 0 0 0 1 .8h8a1 1 0 0 0 1-.8L18 7M9 7V4.5A.5.5 0 0 1 9.5 4h5a.5.5 0 0 1 .5.5V7"/></svg></button>
+        </div>
+      </div>
+      <div class="spark-body">
+        <div class="spark-stage">
+          <canvas class="spark-orb"></canvas>
+          <button type="button" class="spark-mic" id="sparkMic" title="Konuş (Ctrl+Alt+V)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.5 21h7"/></svg></button>
+        </div>
+        <ul class="spark-log" id="sparkLog"></ul>
+      </div>
     </section>
 
     <!-- Hava durumu -->
@@ -108,99 +125,156 @@
   <!-- Görev son tarihi ve tekrarı için açılır pencere (js/core.js → pickDate) -->
   <div class="date-pop" id="datePop" hidden></div>
 
-  <!-- Sesli asistan: dinleme/düşünme durumu, anlaşılan cümle ve cevap (js/assistant.js) -->
+  <!-- SPARK küçük penceresi: SPARK kartı gizliyken üst çubuktaki düğme / Ctrl+Alt+V ile açılır -->
   <div class="assistant-pop" id="assistantPop" hidden>
-    <div class="as-head"><span class="as-state" id="asState"></span><button type="button" class="icon-btn" id="asClose" title="Kapat (Esc)">✕</button></div>
+    <div class="as-head">
+      <canvas class="spark-orb as-orb"></canvas>
+      <div class="as-title"><b>SPARK</b><span class="spark-state"></span></div>
+      <button type="button" class="icon-btn" id="asClose" title="Kapat (Esc)">✕</button>
+    </div>
     <p class="as-heard" id="asHeard"></p>
     <p class="as-answer" id="asAnswer"></p>
   </div>
 
-  <!-- Ayarlar -->
+  <!-- Ayarlar: solda kategoriler, sağda seçili kategorinin sayfası (js/settings.js) -->
   <dialog id="settingsDlg">
-    <form method="dialog" class="settings">
+    <form method="dialog" class="settings set-dlg">
       <h2 class="dlg-title"><img src="icons/logo.svg" alt="" draggable="false"> Ayarlar</h2>
+      <div class="set-wrap">
+        <nav class="set-nav" id="setNav">
+          <button type="button" data-page="general">Genel</button>
+          <button type="button" data-page="look">Görünüm</button>
+          <button type="button" data-page="spark">SPARK</button>
+          <button type="button" data-page="notify">Bildirim &amp; yedek</button>
+          <button type="button" data-page="system">Sistem</button>
+        </nav>
+        <div class="set-pages">
+          <section class="set-page" data-page="general">
+            <h3>Genel</h3>
+            <label>Adın
+              <input id="nameInput" placeholder="Saatin üstünde “Hoş geldiniz, …” olarak görünür" autocomplete="off" maxlength="40">
+            </label>
+            <label>Şehir
+              <div class="row">
+                <input id="cityInput" placeholder="ör. İstanbul" autocomplete="off">
+                <button type="button" id="citySearch">Ara</button>
+              </div>
+            </label>
+            <ul id="cityResults" class="city-results"></ul>
+            <p class="muted" id="cityCurrent"></p>
+          </section>
 
-      <h3>Genel</h3>
-      <label>Adın
-        <input id="nameInput" placeholder="Saatin üstünde “Hoş geldiniz, …” olarak görünür" autocomplete="off" maxlength="40">
-      </label>
-      <label>Şehir
-        <div class="row">
-          <input id="cityInput" placeholder="ör. İstanbul" autocomplete="off">
-          <button type="button" id="citySearch">Ara</button>
+          <section class="set-page" data-page="look">
+            <h3>Tema</h3>
+            <label>Renk teması
+              <select id="themeSelect">
+                <option value="dark">Koyu</option>
+                <option value="navy">Lacivert</option>
+                <option value="light">Açık</option>
+                <option value="cream">Krem</option>
+                <option value="system">Sistem (koyu / açık)</option>
+              </select>
+            </label>
+            <h3>Kartlar</h3>
+            <p class="muted">Kartların arasındaki boşlukları sürükleyerek genişlik ve yükseklikleri ayarlayabilirsin. Kartları taşımak, bir satırı 2 ya da 3 sütun yapmak veya kart gizlemek için üst çubuktaki <b>▦ Düzenle</b>'yi kullan.</p>
+            <div class="row">
+              <button type="button" id="editLayoutFromSettings">▦ Düzeni düzenle</button>
+              <button type="button" id="layoutResetFromSettings">↺ Varsayılan düzen</button>
+            </div>
+            <label class="check"><input type="checkbox" id="compactWeather"> Hava durumu kartı sade (küçük) görünsün</label>
+          </section>
+
+          <section class="set-page" data-page="spark">
+            <h3>SPARK</h3>
+            <p class="muted">SPARK, konuşarak görev ekleyebildiğin ve görevlerin hakkında soru sorabildiğin sesli asistanın. Mikrofon düğmesi ya da <kbd id="voiceShortcutLbl">Ctrl+Alt+V</kbd> ile konuşmaya başla. Google'ın <b>ücretsiz</b> Gemini API anahtarını kullanır — kredi kartı istemez, faturalandırma açmadıkça ücret çıkmaz.</p>
+            <div class="row">
+              <button type="button" id="geminiKeyGet">Ücretsiz anahtar al (Google AI Studio)</button>
+            </div>
+            <label>API anahtarı
+              <input id="geminiKeyInput" type="password" placeholder="AIza…" autocomplete="off" spellcheck="false">
+            </label>
+            <label>Konuşma modeli
+              <input id="geminiModelInput" placeholder="ör. gemini-flash-lite-latest" autocomplete="off" spellcheck="false">
+            </label>
+            <p class="muted">Google AI Studio'daki listeden <b>"Flash Lite"</b> etiketli bir modelin tam kimliğini yapıştır; günlük en yüksek ücretsiz kullanım hakkı onda. Alanlar değiştikçe kendiliğinden kaydedilir.</p>
+            <div class="row">
+              <button type="button" id="geminiTest">Bağlantıyı dene</button>
+            </div>
+            <p class="muted" id="geminiStatus"></p>
+
+            <h3>Dinleme</h3>
+            <label>Konuşmam bitince kendiliğinden gönder
+              <select id="sparkSilence">
+                <option value="0">Kapalı (düğmeye tekrar basarak bitirirsin)</option>
+                <option value="1000">1 saniye sessizlikten sonra</option>
+                <option value="1500">1,5 saniye sessizlikten sonra</option>
+                <option value="2500">2,5 saniye sessizlikten sonra</option>
+              </select>
+            </label>
+
+            <h3>Ses</h3>
+            <label class="check"><input type="checkbox" id="ttsEnabled"> Gerçekçi ses kullan (Gemini). Kapalıysa ya da kota dolarsa Windows sesi kullanılır.</label>
+            <label>Ses tonu
+              <div class="row">
+                <select id="ttsVoice"></select>
+                <button type="button" id="ttsPreview">▶ Dinle</button>
+              </div>
+            </label>
+            <div class="field"><span>Ses modelleri <span class="muted">(yukarıdan aşağıya sırayla denenir)</span></span>
+              <ul class="model-list" id="ttsModelList"></ul>
+              <div class="row">
+                <input id="ttsModelAdd" list="ttsModelSuggest" placeholder="Model kimliği ekle…" autocomplete="off" spellcheck="false">
+                <button type="button" id="ttsModelAddBtn">Ekle</button>
+              </div>
+              <datalist id="ttsModelSuggest">
+                <option value="gemini-2.5-flash-preview-tts">
+                <option value="gemini-2.5-pro-preview-tts">
+              </datalist>
+            </div>
+            <p class="muted">Ücretsiz ses kotası model başına günde yaklaşık 10 cevaptır. Google AI Studio'daki "TTS" etiketli modelleri listeye ekleyerek günlük hakkı artırabilirsin; biri dolunca sıradakine geçilir, hepsi dolunca Windows sesine dönülür. "Dinle" de bir hak kullanır.</p>
+            <p class="muted">Sesin ve görev listenin metni yalnızca konuştuğun anda Google'ın sunucularına gönderilir; başka hiçbir yere kaydedilmez.</p>
+          </section>
+
+          <section class="set-page" data-page="notify">
+            <h3>Sabah bildirimi</h3>
+            <label class="check"><input type="checkbox" id="notifyChk"> Her gün bugünün görevlerini ve gecikenleri Windows bildirimiyle özetle</label>
+            <div class="row time-row">
+              <span class="muted">Saat</span>
+              <button type="button" class="step" data-step="-15" title="15 dk geri">−</button>
+              <input id="notifyTime" class="time-input" maxlength="5" autocomplete="off">
+              <button type="button" class="step" data-step="15" title="15 dk ileri">+</button>
+              <button type="button" id="notifyTest">Şimdi dene</button>
+            </div>
+            <p class="muted">Bilgisayar o saatte kapalıysa, açıldığında gönderilir.</p>
+
+            <h3>Otomatik yedek</h3>
+            <label class="check"><input type="checkbox" id="backupChk"> Veri klasörünü her gün yedekle (son 7 gün saklanır)</label>
+            <div class="row">
+              <input id="backupDir" readonly placeholder="Yedek klasörü seçilmedi">
+              <button type="button" id="backupChoose">Klasör seç…</button>
+            </div>
+            <p class="muted" id="backupStatus"></p>
+            <div class="row">
+              <button type="button" id="backupNow">Şimdi yedekle</button>
+              <button type="button" id="backupOpen">Yedekleri aç</button>
+            </div>
+          </section>
+
+          <section class="set-page" data-page="system">
+            <h3>Sistem</h3>
+            <label class="check"><input type="checkbox" id="autostartChk"> Windows açılınca başlat</label>
+            <p class="muted" id="autostartNote"></p>
+            <p class="muted">Kısayol: <kbd id="shortcutLbl"></kbd> paneli açar/gizler.</p>
+            <h3>Veriler</h3>
+            <p class="muted">Silinen görev, kategori ve notlar kalıcı olarak silinmez; dosyalarında <code>&lt;!-- silindi: … --&gt;</code> işaretiyle pasif olarak kalır. <b>Silinenler</b> penceresinden tek tıkla ya da dosyadan bu işareti silerek geri getirebilirsin.</p>
+            <div class="row">
+              <button type="button" id="openTrash">Silinenler…</button>
+              <button type="button" id="openData">Veri klasörünü aç</button>
+            </div>
+          </section>
         </div>
-      </label>
-      <ul id="cityResults" class="city-results"></ul>
-      <p class="muted" id="cityCurrent"></p>
-      <label>Tema
-        <select id="themeSelect">
-          <option value="dark">Koyu</option>
-          <option value="navy">Lacivert</option>
-          <option value="light">Açık</option>
-          <option value="cream">Krem</option>
-          <option value="system">Sistem (koyu / açık)</option>
-        </select>
-      </label>
-
-      <h3>Kartlar</h3>
-      <p class="muted">Kartların arasındaki boşlukları sürükleyerek genişlik ve yükseklikleri ayarlayabilirsin. Kartları taşımak, bir satırı 2 ya da 3 sütun yapmak veya kart gizlemek için üst çubuktaki <b>▦ Düzenle</b>'yi kullan.</p>
-      <div class="row">
-        <button type="button" id="editLayoutFromSettings">▦ Düzeni düzenle</button>
-        <button type="button" id="layoutResetFromSettings">↺ Varsayılan düzen</button>
       </div>
-      <label class="check"><input type="checkbox" id="compactWeather"> Hava durumu kartı sade (küçük) görünsün</label>
-
-      <h3>Sabah bildirimi</h3>
-      <label class="check"><input type="checkbox" id="notifyChk"> Her gün bugünün görevlerini ve gecikenleri Windows bildirimiyle özetle</label>
-      <div class="row time-row">
-        <span class="muted">Saat</span>
-        <button type="button" class="step" data-step="-15" title="15 dk geri">−</button>
-        <input id="notifyTime" class="time-input" maxlength="5" autocomplete="off">
-        <button type="button" class="step" data-step="15" title="15 dk ileri">+</button>
-        <button type="button" id="notifyTest">Şimdi dene</button>
-      </div>
-      <p class="muted">Bilgisayar o saatte kapalıysa, açıldığında gönderilir.</p>
-
-      <h3>Otomatik yedek</h3>
-      <label class="check"><input type="checkbox" id="backupChk"> Veri klasörünü her gün yedekle (son 7 gün saklanır)</label>
-      <div class="row">
-        <input id="backupDir" readonly placeholder="Yedek klasörü seçilmedi">
-        <button type="button" id="backupChoose">Klasör seç…</button>
-      </div>
-      <p class="muted" id="backupStatus"></p>
-      <div class="row">
-        <button type="button" id="backupNow">Şimdi yedekle</button>
-        <button type="button" id="backupOpen">Yedekleri aç</button>
-      </div>
-
-      <h3>Sesli asistan</h3>
-      <p class="muted">Mikrofon düğmesine (<kbd id="voiceShortcutLbl">Ctrl+Alt+V</kbd>) basıp konuşarak görev ekleyebilir, görevlerin hakkında soru sorabilirsin. Google'ın <b>ücretsiz</b> Gemini API anahtarını gerektirir — kredi kartı istemez, ücretsiz kullanım sınırını aşmadıkça (ve faturalandırma açmadıkça) ücret çıkmaz.</p>
-      <div class="row">
-        <button type="button" id="geminiKeyGet">Ücretsiz anahtar al (Google AI Studio)</button>
-      </div>
-      <label>API anahtarı
-        <input id="geminiKeyInput" type="password" placeholder="AIza… " autocomplete="off" spellcheck="false">
-      </label>
-      <label>Model
-        <input id="geminiModelInput" placeholder="ör. gemini-flash-lite-latest" autocomplete="off" spellcheck="false">
-      </label>
-      <p class="muted">Google AI Studio'daki model listesinde "Flash Lite" etiketli bir model günlük en yüksek ücretsiz kullanım hakkını verir. Tam model kimliğini oradan kopyalayıp buraya yapıştır.</p>
-      <div class="row">
-        <button type="button" id="geminiSave">Kaydet</button>
-        <button type="button" id="geminiTest">Bağlantıyı dene</button>
-      </div>
-      <p class="muted" id="geminiStatus"></p>
-      <p class="muted">Sesin ve görev listenin metni, yalnızca konuştuğun anda Google'ın sunucularına gönderilir; başka hiçbir yere kaydedilmez. Cevapların sesli okunması tamamen bu bilgisayarda olur.</p>
-
-      <h3>Sistem</h3>
-      <label class="check"><input type="checkbox" id="autostartChk"> Windows açılınca başlat</label>
-      <p class="muted" id="autostartNote"></p>
-      <p class="muted">Kısayol: <kbd id="shortcutLbl"></kbd> paneli açar/gizler.</p>
-      <p class="muted">Silinen görev, kategori ve notlar kalıcı olarak silinmez; dosyalarında <code>&lt;!-- silindi: … --&gt;</code> işaretiyle pasif olarak kalır. <b>Silinenler</b> penceresinden tek tıkla ya da dosyadan bu işareti silerek geri getirebilirsin.</p>
-
       <div class="row end">
-        <button type="button" id="openTrash">Silinenler…</button>
-        <button type="button" id="openData">Veri klasörünü aç</button>
         <button value="close" class="primary">Kapat</button>
       </div>
     </form>

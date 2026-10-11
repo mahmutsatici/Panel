@@ -36,6 +36,8 @@ contextBridge.exposeInMainWorld('panel', {
   assistant: {
     ask: (audioBytes, mimeType, contextText) => call('assistant:ask', audioBytes, mimeType, contextText),
     test: () => call('assistant:test'),
+    // SPARK'ın sesi: { pcm, sampleRate, model } döner; kota/bağlantı sorununda hata fırlatır
+    speak: (text, voice) => call('assistant:speak', text, voice),
     // Ctrl+Alt+V kısayolu pencere gizliyken de çalışır; ana süreç bu olayı gönderir.
     onTrigger: cb => ipcRenderer.on('assistant:trigger', () => cb()),
   },

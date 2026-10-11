@@ -1,6 +1,6 @@
 # Panel
 
-Saat, tarih, hava durumu, yapılacaklar, Markdown notlar ve sesli asistan için kişisel masaüstü paneli (Electron).
+Saat, tarih, hava durumu, yapılacaklar, Markdown notlar ve sesli asistan SPARK için kişisel masaüstü paneli (Electron).
 
 ## Komutlar
 - `npm start` — geliştirme modunda çalıştır (önce not editörünü `src/vendor` altına paketler)
@@ -30,32 +30,40 @@ Metnin başında ya da sonunda: `bugün`, `yarın`, `öbür gün`, `haftaya`, `h
 gün adları (`cuma`, `cumaya`…), `15 ekim`, `15.10`, `3 gün sonra`, `2 hafta sonra`; tekrar için `her gün`, `her hafta`…
 - Silinen öğeler `<!-- silindi: … -->` işaretiyle dosyada kalır; Ayarlar → Silinenler'den geri getirilebilir.
 
-## Sesli asistan
-Mikrofon düğmesi (üst çubuk) ya da `Ctrl+Alt+V` ile başlar; tekrar basmak kaydı durdurup gönderir.
+## SPARK (sesli asistan)
+Kendi kartında (küre + konuşma geçmişi) yaşar; kart gizliyse üst çubuğun altında küçük bir pencerede açılır.
+Kartın ya da üst çubuğun mikrofon düğmesi veya `Ctrl+Alt+V` ile başlar; tekrar basmak kaydı durdurup gönderir.
 Ses + o anki görev listesi tek bir Google Gemini isteğine gidiyor; hem konuşmayı anlama hem görev
-listesine bakıp cevap verme Gemini'de oluyor, ayrı bir yerel konuşma tanımaya gerek yok. Cevabın
-sesli okunması (TTS) tamamen yerelde/bedava: Windows'un kendi `speechSynthesis`'i kullanılır.
+listesine bakıp cevap verme Gemini'de oluyor, ayrı bir yerel konuşma tanımaya gerek yok.
 
 - "Yarın rapor yaz ekle iş kategorisine" gibi bir cümle hem görevi hem tarihi hem kategoriyi anlar.
-- Kategori söylenmezse asistan sesle sorar, cevabını dinler.
-- "16 Ekimde Demirören projesinde ne var?" gibi sorularda görev listesine bakıp cevap verir; belirli
+- Var olan görevleri de değiştirir: "süt almayı tamamla", "rapor görevini cumaya al", "eski işi sil" (silinenler Silinenler'den geri gelir).
+- Bağlamında tarih/saat, hava durumu ve görev listesi var: "bugün hava nasıl?", "yarın şemsiye lazım mı?".
+- **Otomatik gönderme:** konuşman bitince (ayarlanabilir sessizlik süresinden sonra) kayıt kendiliğinden gönderilir; Ayarlar → SPARK → Dinleme.
+- Kategori söylenmezse SPARK sesle sorar, cevabını dinler.
+- "16 Ekimde iş kategorisinde ne var?" gibi sorularda görev listesine bakıp cevap verir; belirli
   bir güne bağlıysa takvimde o günü otomatik açar.
-- **Kurulum:** Ayarlar → Sesli asistan → [Google AI Studio](https://aistudio.google.com/app/apikey)'dan
+- **Ses:** cevaplar Gemini TTS ile gerçekçi bir sesle okunur; ses tonu Ayarlar → SPARK'tan seçilir (▶ Dinle ile denenir).
+  Ücretsiz ses kotası model başına günde ~10 cevaptır; birden çok TTS modeli virgülle yazılırsa sırayla denenir.
+  Kota dolar ya da bağlantı olmazsa Windows'un yerel sesine (Tolga) düşülür — durum yazısında "yedek ses" görünür.
+- **Animasyon:** küre, dinlerken mikrofondaki sesin, konuşurken SPARK'ın kendi sesinin gerçek seviyesine göre dalgalanır
+  (yerel seste kelime vuruşlarıyla taklit edilir).
+- **Kurulum:** Ayarlar → SPARK → [Google AI Studio](https://aistudio.google.com/app/apikey)'dan
   ücretsiz bir API anahtarı al (kredi kartı istemez), yapıştır. Model alanına Google AI Studio'daki model
   listesinden **"Flash Lite"** etiketli birinin tam kimliğini yapıştır — ücretsiz kullanımda günlük en
-  yüksek istek hakkını bu veriyor. Anahtar ve model `settings.json`'da kalır, koda hiç girmez.
-- Ses ve görev listesi metni yalnızca konuştuğun anda Google'a gider; başka hiçbir yere kaydedilmez.
+  yüksek istek hakkını bu veriyor. Anahtar ve modeller `settings.json`'da kalır, koda hiç girmez.
+- Ses ve görev listesi metni yalnızca konuştuğun anda Google'a gider; konuşma geçmişi yalnızca bu bilgisayarda tutulur (son 30).
 
 ## Kod yapısı
 `src/js/` altında bölümler: `core` (ortak yardımcılar, tarih penceresi, doğal dil), `clock`, `weather`, `todos`,
-`calendar`, `assistant` (sesli asistan), `stats`, `notes`, `trash`, `layout`, `settings`; `src/app.js` başlangıç.
+`calendar`, `assistant` (SPARK), `stats`, `notes`, `trash`, `layout`, `settings`; `src/app.js` başlangıç.
 Sabah bildirimi, otomatik yedek ve Gemini API çağrısı `main.js` içindedir (zamanlayıcı dakikada bir kontrol eder).
 - `notes\*.md` — her not ayrı bir Markdown dosyası
 - `settings.json` — şehir, tema, otomatik başlatma, hava durumu önbelleği
 
 ## Kısayollar
 - `Ctrl+Alt+P` — paneli aç/gizle (her yerden)
-- `Ctrl+Alt+V` — sesli asistanı aç/kapat (her yerden)
+- `Ctrl+Alt+V` — SPARK'ı dinlet/durdur (her yerden)
 - `Ctrl+S` — notu hemen kaydet · not içindeki bağlantıyı açmak için `Ctrl+tık`
 - Pencereyi kapatmak uygulamayı tepsiye gönderir; tamamen çıkmak için tepsi simgesi → **Çıkış**.
 

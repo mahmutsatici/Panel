@@ -7,6 +7,7 @@
 // Üst çubuktaki "Düzenle" ile kartlar taşınır, gizlenir ve geri eklenir.
 const CARDS = {
   clock: 'Saat',
+  spark: 'SPARK',
   weather: 'Hava durumu',
   calendar: 'Takvim',
   stats: 'Özet',
@@ -16,7 +17,7 @@ const CARDS = {
 const DEFAULT_LAYOUT = {
   v: 2,
   rows: [
-    { size: 1.35, cols: [{ card: 'clock', size: 1 }, { card: 'weather', size: 2.3 }, { card: 'stats', size: 1.5 }] },
+    { size: 1.35, cols: [{ card: 'clock', size: 1 }, { card: 'spark', size: 1.2 }, { card: 'weather', size: 2.3 }, { card: 'stats', size: 1.4 }] },
     { size: 2, cols: [{ card: 'calendar', size: 1 }, { card: 'todos', size: 1.3 }, { card: 'notes', size: 2.5 }] },
   ],
   hidden: [],
@@ -36,10 +37,14 @@ function normalizeLayout(saved) {
     .map(r => ({ size: r.size > 0 ? r.size : 1, cols: (r.cols || []).filter(c => ok(c.card)).map(c => ({ card: c.card, size: c.size > 0 ? c.size : 1 })) }))
     .filter(r => r.cols.length);
   l.hidden = (l.hidden || []).filter(ok);
-  // Yeni eklenmiş (düzende hiç olmayan) kartlar en alta yeni satır olarak gelir
+  // Yeni eklenmiş (kayıtlı düzende hiç olmayan) kartlar ilk satırın sonuna eklenir; böylece
+  // kullanıcının kendi ayarladığı düzen bozulmaz, yeni kart da gözden kaçmaz.
   const missing = Object.keys(CARDS).filter(id => !seen.has(id));
-  if (missing.length) l.rows.push({ size: 1, cols: missing.map(card => ({ card, size: 1 })) });
   if (!l.rows.length) return clone(DEFAULT_LAYOUT);
+  for (const card of missing) {
+    const row = l.rows[0];
+    row.cols.push({ card, size: row.cols.reduce((s, c) => s + c.size, 0) / row.cols.length });
+  }
   return l;
 }
 let layout = null;   // geçerli düzen (normalize edilmiş)

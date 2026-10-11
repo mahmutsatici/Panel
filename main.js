@@ -37,10 +37,15 @@ const DEFAULT_SETTINGS = {
   titleBar: { color: '#0e1016', symbolColor: '#e9ebf0' },
   notify: { enabled: true, time: '09:00', lastDate: null },
   backup: { enabled: false, dir: null, lastAt: null, lastDate: null, error: null },
-  // Sesli asistan: ücretsiz Google AI Studio anahtarı kullanıcıdan alınır, asla pakete/koda gömülmez.
+  // SPARK (sesli asistan): ücretsiz Google AI Studio anahtarı kullanıcıdan alınır, asla pakete/koda gömülmez.
   // Model adı da ayardan değiştirilebilir — Google'ın güncel model kimliği Ayarlar'daki isimle
   // birebir aynı olmayabilir, kullanıcı Google AI Studio'daki tam kimliği yapıştırmalı.
   geminiApiKey: null, geminiModel: 'gemini-flash-lite-latest',
+  // SPARK'ın sesi (Gemini TTS). ttsModels virgülle ayrılmış listedir ve sırayla denenir: birinin günlük
+  // ücretsiz kotası dolarsa sıradakine geçilir; hepsi doluysa arayüz yerel Windows sesine (Tolga) döner.
+  ttsEnabled: true, ttsVoice: 'Kore',
+  // Konuşma bitince (bu kadar ms sessizlikten sonra) kayıt kendiliğinden gönderilir; 0 = kapalı, düğmeyle bitirilir
+  sparkSilenceMs: 1500, ttsModels: 'gemini-2.5-flash-preview-tts',
 };
 
 async function ensureData() {
@@ -236,26 +241,32 @@ const IMAGE_TYPES ={ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif'
 // Arayüz ses kaydını + o anki görev listesini (metin) gönderir; burada tek bir Gemini isteğine
 // dönüştürülür. Ses tanıma + anlama + muhakeme Gemini'de olur, yerel bir konuşma tanımaya gerek yoktur.
 // Cevap sesli okuma (TTS) tamamen yerelde/bedava kalır (bkz. src/js/assistant.js → speechSynthesis).
-const ASSISTANT_SYSTEM_PROMPT = `Sen "Panel" adlı kişisel masaüstü uygulamasının sesli asistanısın. Kullanıcı Türkçe konuşuyor, sesini dinliyorsun.
-Her istekte sana kullanıcının güncel görev listesi (kategoriler, görevler, tarihler) metin olarak da veriliyor; cevabını buna göre ver.
+const ASSISTANT_SYSTEM_PROMPT = `Senin adın SPARK. "Panel" adlı kişisel masaüstü uygulamasının sesli asistanısın. Kullanıcı Türkçe konuşuyor, sesini dinliyorsun.
+Sıcak, samimi ve KISA konuş. speech alanı Gemini sesiyle okunuyor ve süre uzunluğa göre artıyor: en fazla 1-2 kısa cümle (yaklaşık 20 kelime), doğal konuşma diliyle yaz (madde işareti, emoji, kısaltma yok; sayıları ve dereceleri okunuşuyla yaz).
+Her istekte sana bağlam metni veriliyor: şu anki tarih/saat, hava durumu ve görev listesi. Görevlerin başında [t12] gibi bir kimlik var; görevi değiştirirken task_id olarak yalnızca bu kimliklerden birini kullan, asla uydurma.
 
-Yanıtını SADECE verilen JSON şemasına uygun, Türkçe olarak ver:
-- type "add_task": kullanıcı yeni bir görev eklemek istiyor VE hangi kategoriye ekleneceği ya söylendi ya da context'teki "Önceki istek" notundan belli.
-  task_text: görevin kısa net metni (tarih/kategori ifadelerini metinden çıkar). due: varsa YYYY-AA-GG. rec: varsa tekrar kuralı ("her gün" / "hafta içi" / "her hafta" / "her N hafta" / "her ay" / "her yıl"). category: hangi kategoriye eklenecek (mevcut kategorilerden biri ya da kullanıcının söylediği yeni bir isim).
-  speech: kullanıcıya kısa sesli onay (ör. "Tamam, iş kategorisine rapor yaz eklendi.").
-- type "need_category": kullanıcı görev eklemek istiyor ama kategoriyi söylemedi ve context'te "Önceki istek" notu da yok.
-  task_text/due/rec'i yine doldur. speech: "Hangi kategoriye eklemek istersin?" gibi kısa bir soru.
-- type "answer": kullanıcı bir soru soruyor ya da genel bir şey söylüyor (görev ekleme değil). Verilen görev listesine bakarak Türkçe, kısa (sesli okunacağı için en fazla 2-3 cümle) bir cevap ver. Belirli bir güne bağlı bir soruysa highlight_date alanına o tarihi (YYYY-AA-GG) yaz, değilse boş bırak.
+Yanıtını SADECE verilen JSON şemasına uygun, Türkçe olarak ver. type değerleri:
+- "add_task": yeni görev ekleme isteği VE kategori ya söylendi ya da context'teki "Önceki istek" notundan belli.
+  task_text: görevin kısa net metni (tarih/kategori ifadelerini metinden çıkar). due: varsa YYYY-AA-GG. rec: varsa tekrar kuralı ("her gün" / "hafta içi" / "her hafta" / "her N hafta" / "her ay" / "her yıl"). category: mevcut kategorilerden biri ya da kullanıcının söylediği yeni bir isim.
+- "need_category": görev ekleme isteği ama kategori söylenmedi ve "Önceki istek" notu da yok. task_text/due/rec'i yine doldur. speech: "Hangi kategoriye ekleyeyim?" gibi kısa bir soru.
+- "complete_task": var olan bir görevi yapıldı/tamamlandı işaretle. task_id zorunlu.
+- "reopen_task": yapılmış bir görevi tekrar yapılmadı yap. task_id zorunlu.
+- "delete_task": görevi sil (Silinenler'den geri getirilebilir). task_id zorunlu.
+- "update_task": var olan bir görevin metnini, tarihini ya da tekrarını değiştir. task_id zorunlu. Değişenleri doldur: new_text (yeni metin), due (YYYY-AA-GG; tarihi kaldırmak için "yok"), rec (tekrar kuralı; kaldırmak için "yok"). Değişmeyeni boş bırak.
+  Görevi belirlerken kullanıcının söylediği ifadeye en çok uyan TEK görevi seç. Birden fazla görev eşit derecede uyuyorsa ya da hiçbiri uymuyorsa değişiklik yapma: type "answer" ile hangisini kastettiğini kısaca sor.
+- "answer": soru ya da sohbet (görev değişikliği değil). Bağlamdaki görev listesi, hava durumu ve tarih/saate bakarak cevap ver. Belirli bir güne bağlı bir soruysa highlight_date alanına o tarihi (YYYY-AA-GG) yaz, değilse boş bırak. Hava durumu bilgisi bağlamda yoksa şehrin Ayarlar'dan seçilmediğini söyle.
 
-heard alanına kullanıcının söylediğini anladığın haliyle yaz (kullanıcıya "seni şöyle anladım" diye gösterilecek).
+heard alanına kullanıcının söylediğini anladığın haliyle yaz.
 Anlayamadığın bir ses gelirse type "answer" ile nazikçe tekrar etmesini iste.`;
 const ASSISTANT_RESPONSE_SCHEMA = {
   type: 'object',
   properties: {
-    type: { type: 'string', enum: ['add_task', 'answer', 'need_category'] },
+    type: { type: 'string', enum: ['add_task', 'need_category', 'complete_task', 'reopen_task', 'delete_task', 'update_task', 'answer'] },
     heard: { type: 'string' },
     speech: { type: 'string' },
     task_text: { type: 'string' },
+    task_id: { type: 'string' },
+    new_text: { type: 'string' },
     due: { type: 'string' },
     rec: { type: 'string' },
     category: { type: 'string' },
@@ -287,6 +298,46 @@ async function askAssistant(audioBytes, mimeType, contextText) {
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error('Gemini boş yanıt döndürdü (ses anlaşılamamış olabilir).');
   try { return JSON.parse(text); } catch { throw new Error('Gemini yanıtı çözümlenemedi.'); }
+}
+
+// ---------- SPARK'ın sesi (Gemini TTS) ----------
+// Metni Gemini'nin hazır seslerinden biriyle sese çevirir; ham PCM (16 bit, tek kanal) döner.
+// Ücretsiz TTS kotası model başına günde ~10 istek; bu yüzden ayardaki modeller sırayla denenir.
+// Günlük kotası dolan model o gün için atlanır (dakikalık sınır ise sadece o istekte atlanır).
+// Hepsi başarısız olursa hata fırlatılır, arayüz yerel Windows sesine (Tolga) döner.
+const ttsDayExhausted = new Map();   // model → kotasının dolduğu gün
+async function geminiTts(text, voiceOverride) {
+  const s = await readSettings();
+  if (!s.geminiApiKey) throw new Error('Gemini API anahtarı girilmemiş.');
+  const models = String(s.ttsModels || DEFAULT_SETTINGS.ttsModels).split(',').map(m => m.trim()).filter(Boolean);
+  const today = todayISO();
+  let lastErr = new Error('Ayarlarda kullanılabilir bir TTS modeli yok.');
+  for (const model of models) {
+    if (ttsDayExhausted.get(model) === today) continue;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(s.geminiApiKey)}`;
+    const body = {
+      contents: [{ parts: [{ text }] }],
+      generationConfig: {
+        responseModalities: ['AUDIO'],
+        speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voiceOverride || s.ttsVoice || 'Kore' } } },
+      },
+    };
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      if (res.status === 429 && /PerDay/i.test(errText)) ttsDayExhausted.set(model, today);
+      let msg = `${model}: istek başarısız (${res.status})`;
+      try { msg = `${model}: ${JSON.parse(errText)?.error?.message || res.status}`; } catch {}
+      lastErr = new Error(msg);
+      continue;
+    }
+    const data = await res.json();
+    const part = data?.candidates?.[0]?.content?.parts?.find(p => p.inlineData?.data);
+    if (!part) { lastErr = new Error(`${model}: ses dönmedi`); continue; }
+    const rate = Number((part.inlineData.mimeType || '').match(/rate=(\d+)/)?.[1]) || 24000;
+    return { pcm: Buffer.from(part.inlineData.data, 'base64'), sampleRate: rate, model };
+  }
+  throw lastErr;
 }
 
 // ---------- IPC ----------
@@ -392,6 +443,7 @@ function registerIpc() {
   });
 
   ipcMain.handle('assistant:ask', (_e, audioBytes, mimeType, contextText) => askAssistant(audioBytes, mimeType, contextText));
+  ipcMain.handle('assistant:speak', (_e, text, voice) => geminiTts(String(text || '').slice(0, 1500), voice));
   // Ayarlar'daki "Bağlantıyı dene": ses göndermeden anahtar/model doğru mu diye küçük bir metin isteği
   ipcMain.handle('assistant:test', () => askAssistant(null, null,
     'Bu bir bağlantı testidir, gerçek bir kullanıcı isteği değil. type "answer", speech alanına sadece "Bağlantı başarılı." yaz.'));

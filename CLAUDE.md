@@ -17,7 +17,7 @@ Aşağıdaki davranış ilkeleri [multica-ai/andrej-karpathy-skills](https://git
 
 - `npm run build`: paketler. Değişiklik sonrası asgari doğrulama budur.
 - `npm start`: build + uygulamayı açar (elle doğrulama).
-- `npm run dist`: Windows NSIS kurulum paketi.
+- `npm run dist`: Windows NSIS kurulum paketi (`dist/v<sürüm>/` klasörüne).
 - Otomatik test yok; "doğrulama" = build hatasız geçer + ilgili özellik uygulamada denenir.
 
 ## 1. Kodlamadan önce düşün
