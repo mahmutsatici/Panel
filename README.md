@@ -41,6 +41,7 @@ listesine bakıp cevap verme Gemini'de oluyor, ayrı bir yerel konuşma tanımay
 - Var olan görevleri de değiştirir: "süt almayı tamamla", "rapor görevini cumaya al", "eski işi sil" (silinenler Silinenler'den geri gelir).
 - Bağlamında tarih/saat, hava durumu ve görev listesi var: "bugün hava nasıl?", "yarın şemsiye lazım mı?".
 - **Yazılı sohbet:** SPARK kartının altındaki kutuya yazarak da konuşabilirsin; aynı sohbetten devam eder, cevabı sesli okumaz. Tek mesajda birden fazla görev eklenebilir: "yarın rapor yaz, cuma sunum hazırla, süt almayı tamamla".
+- **Bilgisayarda işlem:** "google anasayfasını aç" varsayılan tarayıcında yeni sekmede açılır. YouTube Music (Chrome ile kurulmuş uygulama) için: "şu şarkıyı aç", "chill bir şeyler aç" (önce Ayarlar → SPARK → Müzik listelerim'deki listelerden seçer ve karışık çalar), "duraklat", "sonraki şarkı", "sesi kıs". Çalışması `scripts/ytm.ps1` ile Windows UI Automation ve medya tuşlarına dayanır; YouTube Music'in resmi bir API'si yoktur, site düğme adlarını değiştirirse betik güncellenmelidir.
 - **Otomatik gönderme:** konuşman bitince (ayarlanabilir sessizlik süresinden sonra) kayıt kendiliğinden gönderilir; Ayarlar → SPARK → Dinleme.
 - Kategori söylenmezse SPARK sesle sorar, cevabını dinler.
 - "16 Ekimde iş kategorisinde ne var?" gibi sorularda görev listesine bakıp cevap verir; belirli

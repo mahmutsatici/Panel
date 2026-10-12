@@ -39,6 +39,8 @@ function fillSettingsDialog() {
   $('#ttsEnabled').checked = settings.ttsEnabled !== false;
   $('#ttsVoice').value = settings.ttsVoice || 'Kore';
   renderTtsModels();
+  renderMusicLists();
+  refreshYtmStatus();
   $('#sparkSilence').value = String(settings.sparkSilenceMs ?? 1500);
   renderLayoutSettings();
   renderNotifyBackup();
@@ -104,6 +106,40 @@ $('#geminiTest').onclick = async () => {
   }
 };
 $('#sparkSilence').onchange = async e => { settings = await api.settings.set({ sparkSilenceMs: Number(e.target.value) }); };
+// Müzik listeleri: [{ name, id }] — bağlantıdan list= kimliği ayıklanır
+function renderMusicLists() {
+  const lists = settings.musicLists || [];
+  $('#musicListEl').innerHTML = lists.length
+    ? lists.map((l, i) => `<li><span><b>${esc(l.name)}</b> <span class="muted">${esc(l.id.slice(0, 14))}…</span></span><button type="button" class="icon-btn" data-i="${i}" title="Listeden çıkar">✕</button></li>`).join('')
+    : '<li class="muted">Liste eklenmedi — SPARK arama sonuçlarından çalar.</li>';
+}
+const listIdOf = v => {
+  const t = v.trim();
+  if (/^[A-Za-z0-9_-]{10,}$/.test(t)) return t;
+  try { return new URL(t).searchParams.get('list'); } catch { return null; }
+};
+async function saveMusicLists(lists) {
+  settings = await api.settings.set({ musicLists: lists });
+  renderMusicLists();
+}
+$('#musicAdd').onclick = () => {
+  const name = $('#musicName').value.trim(), id = listIdOf($('#musicUrl').value);
+  if (!name || !id) { $('#ytmStatus').textContent = '⚠ Liste adı ve geçerli bir YouTube Music liste bağlantısı gerekli (…?list=… içermeli).'; return; }
+  $('#musicName').value = $('#musicUrl').value = '';
+  const lists = (settings.musicLists || []).filter(l => l.id !== id && l.name !== name);
+  saveMusicLists([...lists, { name, id }]);
+  refreshYtmStatus();
+};
+$('#musicListEl').onclick = e => {
+  const i = e.target.closest('button')?.dataset.i;
+  if (i != null) saveMusicLists((settings.musicLists || []).filter((_, j) => j !== Number(i)));
+};
+async function refreshYtmStatus() {
+  const r = await api.assistant.system({ type: 'ytm_status' }).catch(() => ({ ok: false }));
+  $('#ytmStatus').textContent = r.ok
+    ? '✓ YouTube Music uygulaması bulundu; müzik orada açılır.'
+    : 'YouTube Music uygulaması (Chrome ile kurulmuş) bulunamadı; müzik tarayıcıda yeni sekmede açılır.';
+}
 $('#ttsEnabled').onchange = async e => { settings = await api.settings.set({ ttsEnabled: e.target.checked }); };
 $('#ttsVoice').onchange = async e => { settings = await api.settings.set({ ttsVoice: e.target.value }); };
 $('#ttsPreview').onclick = async () => {

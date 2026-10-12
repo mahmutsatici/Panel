@@ -1,7 +1,7 @@
 {
   "name": "masaustu-panel",
   "productName": "Panel",
-  "version": "1.4.1",
+  "version": "1.5.1",
   "description": "Saat, hava durumu, yapılacaklar, Markdown notlar ve sesli asistan için kişisel masaüstü paneli",
   "main": "main.js",
   "private": true,
@@ -22,6 +22,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "scripts/ytm.ps1",
       "src/**",
       "node_modules/marked/lib/**",
       "node_modules/dompurify/dist/**",

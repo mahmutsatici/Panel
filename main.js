@@ -1,6 +1,8 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain, globalShortcut, shell, nativeImage, screen, Notification, dialog, session } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
+const fsSync = require('fs');
+const { execFile } = require('child_process');
 const { pathToFileURL } = require('url');
 
 // Yerleşik arayüz parçaları Türkçe olsun
@@ -45,7 +47,9 @@ const DEFAULT_SETTINGS = {
   // ücretsiz kotası dolarsa sıradakine geçilir; hepsi doluysa arayüz yerel Windows sesine (Tolga) döner.
   ttsEnabled: true, ttsVoice: 'Kore',
   // Konuşma bitince (bu kadar ms sessizlikten sonra) kayıt kendiliğinden gönderilir; 0 = kapalı, düğmeyle bitirilir
-  sparkSilenceMs: 1500, ttsModels: 'gemini-2.5-flash-preview-tts',
+  sparkSilenceMs: 1500,
+  // SPARK'ın öncelik vereceği YouTube Music listeleri: [{ name: 'Chill', id: 'PL…' }]
+  musicLists: [], ttsModels: 'gemini-2.5-flash-preview-tts',
 };
 
 async function ensureData() {
@@ -293,6 +297,31 @@ async function runBackup() {
   for (const old of days.slice(BACKUP_KEEP)) await fs.rm(path.join(root, old), { recursive: true, force: true });
   return dest;
 }
+// İşlem öncesi yedek (scripts/backup.js tetikler: Panel.exe --backup-now=<ad>). Yedeği çalışan uygulama alır;
+// çünkü geliştirme ortamındaki araçlar veri klasörünü bazen eski bir görüntüsüyle görebiliyor.
+// Sonuç userData/backup-sonuc.json dosyasına yazılır (betik bunu bekler).
+async function backupBeforeTask(label) {
+  const result = { at: Date.now(), label, ok: false };
+  try {
+    const s = await readSettings();
+    if (!s.backup.dir) throw new Error('Yedek klasörü seçilmedi');
+    const d = new Date(), p2 = n => String(n).padStart(2, '0');
+    const stamp = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}_${p2(d.getHours())}${p2(d.getMinutes())}`;
+    const root = path.join(backupRoot(s.backup.dir), 'islem-oncesi');
+    const dest = path.join(root, label ? `${stamp}_${label}` : stamp);
+    await fs.mkdir(root, { recursive: true });
+    await fs.cp(dataDir(), dest, { recursive: true, force: true, preserveTimestamps: true });
+    const old = (await fs.readdir(root, { withFileTypes: true }))
+      .filter(e => e.isDirectory() && /^\d{4}-\d{2}-\d{2}_\d{4}/.test(e.name)).map(e => e.name).sort().reverse();
+    for (const n of old.slice(30)) await fs.rm(path.join(root, n), { recursive: true, force: true });
+    const st = await readJson(path.join(dest, 'settings.json'));
+    Object.assign(result, { ok: true, dest, city: st?.city?.name || null, lists: (st?.musicLists || []).length, files: (await fs.readdir(dest)).length });
+  } catch (err) {
+    result.error = String(err.message || err);
+  }
+  await writeAtomic(path.join(app.getPath('userData'), 'backup-sonuc.json'), JSON.stringify(result, null, 2)).catch(() => {});
+  return result;
+}
 async function backupNow() {
   try {
     await runBackup();
@@ -336,6 +365,10 @@ Yanıtını SADECE verilen JSON şemasına uygun, Türkçe olarak ver. type değ
   · action "update_task": task_id'li görevin new_text (yeni metin), due (YYYY-AA-GG; kaldırmak için "yok") ya da rec (kaldırmak için "yok") alanını değiştir; değişmeyeni boş bırak.
   Mevcut bir görevi belirlerken söyleneni en iyi karşılayan TEK görevi seç. Emin olamıyorsan ya da birden fazla görev eşit uyuyorsa o işlemi yazma; type "answer" ile hangisini kastettiğini kısaca sor.
   Kategori: kullanıcı yeni görev için kategori söylemediyse (ve önceki konuşmada belirtmediyse) görevi kendin bir kategoriye KOYMA; yalnızca tek bir aktif kategori varsa onu kullan, aksi halde type "need_category" ile sor.
+- Bilgisayarda işlem (actions içinde, görev işlemleriyle aynı mesajda da olabilir):
+  · action "open_url": kullanıcı bir web sayfası açmak/aramak istiyor ("google'ı aç", "github.com'u aç", "yarınki maçı google'da ara"). url: tam adres (https://…). Bilinen sitelerin ana sayfasını kullan; arama istenirse https://www.google.com/search?q=<kodlanmış arama> kullan.
+  · action "play_music": müzik çal (kullanıcı YouTube Music kullanıyor). Önce bağlamdaki "Müzik listelerim" listesine bak: istek bu listelerden birine uyuyorsa (ör. "chill bir şeyler aç" → adı chill/rahat/dinlendirici olan) music_list alanına o listenin adını AYNEN yaz. Uymuyorsa: belirli bir şarkı/sanatçı için music_kind "song" ve music_query "sanatçı şarkı adı"; tür/ruh hali/genel istek için music_kind "playlist" ve music_query kısa bir arama ("chill lofi", "türkçe rap").
+  · action "media_control": çalan müziği yönet. media_key: play_pause (durdur/duraklat/devam et), next (sonraki şarkı), previous (önceki şarkı), stop, volume_up (sesi aç), volume_down (sesi kıs), mute (sesi kapat/aç).
 - "need_category": eklenecek görev(ler) var ama kategori söylenmedi, bağlamdaki "Önceki istek" notu da yok ve hangi kategoriye gideceği belli değil. Görevleri yine actions içine add_task olarak yaz (category boş) — actions boş KALMAMALI, kullanıcının istediği her görev orada olmalı.
   Önceki konuşmada kullanıcı görev eklemek istediyse ve SPARK kategori sorduysa, kullanıcı şimdi sadece kategori söylese bile ("Kişisel", "ikisi de iş olsun") önceki mesajlardaki TÜM görevleri o kategoriyle actions'a add_task olarak yaz. speech: "Hangi kategoriye ekleyeyim?" gibi kısa bir soru.
 - "answer": soru ya da sohbet (görev değişikliği yok). Bağlamdaki görev listesi, hava durumu, tarih/saat ve önceki konuşmaya bakarak cevap ver. Belirli bir güne bağlı bir soruysa highlight_date alanına o tarihi (YYYY-AA-GG) yaz, değilse boş bırak. Hava durumu bilgisi bağlamda yoksa şehrin Ayarlar'dan seçilmediğini söyle.
@@ -353,7 +386,12 @@ const ASSISTANT_RESPONSE_SCHEMA = {
       items: {
         type: 'object',
         properties: {
-          action: { type: 'string', enum: ['add_task', 'complete_task', 'reopen_task', 'delete_task', 'update_task'] },
+          action: { type: 'string', enum: ['add_task', 'complete_task', 'reopen_task', 'delete_task', 'update_task', 'open_url', 'play_music', 'media_control'] },
+          url: { type: 'string' },
+          music_query: { type: 'string' },
+          music_kind: { type: 'string', enum: ['song', 'playlist'] },
+          music_list: { type: 'string' },
+          media_key: { type: 'string', enum: ['play_pause', 'next', 'previous', 'stop', 'volume_up', 'volume_down', 'mute'] },
           task_text: { type: 'string' },
           task_id: { type: 'string' },
           new_text: { type: 'string' },
@@ -412,6 +450,108 @@ async function askAssistant(audioBytes, mimeType, contextText) {
     lastWhy = `çözümlenemedi (${cand?.finishReason || 'bilinmiyor'})`;
   }
   throw new Error(`Gemini yanıtı ${lastWhy}; ses anlaşılamamış olabilir, tekrar dene.`);
+}
+
+// ---------- Bilgisayarda işlemler: tarayıcı ve YouTube Music ----------
+// Chrome ile kurulmuş "YouTube Music" uygulamasını (PWA) Başlat menüsündeki kısayolundan bulur.
+function findYtmApp() {
+  try {
+    const dir = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Chrome Uygulamaları');
+    for (const f of fsSync.readdirSync(dir)) {
+      if (!f.endsWith('.lnk') || !/youtube music/i.test(f)) continue;
+      const l = shell.readShortcutLink(path.join(dir, f));
+      const appId = /--app-id=([a-p]{32})/.exec(l.args || '')?.[1];
+      if (!appId) continue;
+      const profile = /--profile-directory=("[^"]+"|\S+)/.exec(l.args)?.[1]?.replace(/"/g, '') || 'Default';
+      return { exe: l.target, appId, profile };
+    }
+  } catch {}
+  return null;
+}
+// scripts/ytm.ps1'i çalıştırır (paketliyken asar içinden okunup geçici dosyaya yazılır)
+async function runYtmScript(args) {
+  const script = path.join(app.getPath('userData'), 'ytm.ps1');
+  await fs.writeFile(script, await fs.readFile(path.join(__dirname, 'scripts', 'ytm.ps1')));
+  return new Promise((resolve, reject) => {
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', script, ...args],
+      { timeout: 40000, windowsHide: true }, (err, stdout, stderr) => {
+        if (err) return reject(new Error((stderr || err.message || '').toString().trim().split('\n')[0]));
+        resolve(String(stdout).trim().split('\n').pop().trim());
+      });
+  });
+}
+// YouTube Music'in belgelenmemiş arama uç noktası (anahtar gerektirmez). Bozulursa arama sayfası açılır.
+async function ytmSearch(query, kind) {
+  const params = kind === 'playlist' ? 'EgeKAQQoAEABagwQDhAKEAMQBBAJEAU%3D' : 'EgWKAQIIAWoKEAkQBRAKEAMQBA%3D%3D';
+  const body = { context: { client: { clientName: 'WEB_REMIX', clientVersion: '1.20241001.01.00', hl: 'tr', gl: 'TR' } }, query, params };
+  const res = await fetch('https://music.youtube.com/youtubei/v1/search?prettyPrint=false', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'https://music.youtube.com' },
+    body: JSON.stringify(body), signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) throw new Error('YouTube Music araması başarısız (' + res.status + ')');
+  const data = await res.json();
+  let found = null;
+  (function walk(o) {
+    if (found || !o || typeof o !== 'object') return;
+    const r = o.musicResponsiveListItemRenderer;
+    if (r) {
+      const id = kind === 'playlist'
+        ? r.navigationEndpoint?.browseEndpoint?.browseId?.replace(/^VL/, '')
+        : r.playlistItemData?.videoId || r.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId;
+      if (id) { found = id; return; }
+    }
+    for (const k in o) walk(o[k]);
+  })(data);
+  return found;
+}
+const trLower = s => String(s || '').toLocaleLowerCase('tr').trim();
+// Adresi YouTube Music uygulamasında açar; uygulama bulunamazsa varsayılan tarayıcıda yeni sekmede açar.
+async function openInYtm(url, shuffle) {
+  const y = findYtmApp();
+  if (!y) { await shell.openExternal(url); return 'YouTube Music uygulaması bulunamadı, tarayıcıda açtım.'; }
+  const out = await runYtmScript(['-Mode', 'open', '-Url', url, '-Exe', y.exe, '-ProfileDir', y.profile, '-AppId', y.appId, ...(shuffle ? ['-Shuffle'] : [])]);
+  if (out === 'pencere-yok') return 'YouTube Music penceresi açılamadı.';
+  return null;   // başarılı
+}
+// Arayüzden gelen işlem isteği: { type: 'open_url'|'play_music'|'media_control', ... } → { ok, message? }
+async function systemAction(a) {
+  try {
+    if (a.type === 'ytm_status') return { ok: !!findYtmApp() };
+    if (a.type === 'open_url') {
+      const u = new URL(String(a.url || ''));
+      if (!/^https?:$/.test(u.protocol)) throw new Error('Yalnızca http/https adresleri açılabilir.');
+      await shell.openExternal(u.href);   // varsayılan tarayıcıda yeni sekme; ayrı uygulama penceresi açılmaz
+      return { ok: true };
+    }
+    if (a.type === 'media_control') {
+      const out = await runYtmScript(['-Mode', 'key', '-Key', String(a.key || '')]);
+      return out === 'ok' ? { ok: true } : { ok: false, message: out };
+    }
+    if (a.type === 'play_music') {
+      const s = await readSettings();
+      let url, shuffle = false;
+      const lists = Array.isArray(s.musicLists) ? s.musicLists : [];
+      const want = trLower(a.list);
+      const hit = want && (lists.find(l => trLower(l.name) === want) || lists.find(l => trLower(l.name).includes(want) || want.includes(trLower(l.name))));
+      if (hit) {
+        url = `https://music.youtube.com/playlist?list=${encodeURIComponent(hit.id)}`;
+        shuffle = true;
+      } else if (a.query) {
+        const kind = a.kind === 'playlist' ? 'playlist' : 'song';
+        const id = await ytmSearch(String(a.query), kind).catch(() => null);
+        if (id && kind === 'playlist') { url = `https://music.youtube.com/playlist?list=${encodeURIComponent(id)}`; shuffle = true; }
+        else if (id) url = `https://music.youtube.com/watch?v=${encodeURIComponent(id)}&list=RDAMVM${encodeURIComponent(id)}`;
+        else url = `https://music.youtube.com/search?q=${encodeURIComponent(String(a.query))}`;   // sonuç/uç nokta yoksa arama sayfası
+      } else {
+        return { ok: false, message: 'Ne çalacağımı anlayamadım.' };
+      }
+      const msg = await openInYtm(url, shuffle);
+      return msg ? { ok: false, message: msg } : { ok: true };
+    }
+    return { ok: false, message: 'Bilinmeyen işlem.' };
+  } catch (err) {
+    return { ok: false, message: String(err?.message || err).slice(0, 160) };
+  }
 }
 
 // ---------- SPARK'ın sesi (Gemini TTS) ----------
@@ -557,6 +697,7 @@ function registerIpc() {
   });
 
   ipcMain.handle('assistant:ask', (_e, audioBytes, mimeType, contextText) => askAssistant(audioBytes, mimeType, contextText));
+  ipcMain.handle('assistant:system', (_e, act) => systemAction(act || {}));
   ipcMain.handle('assistant:speak', (_e, text, voice) => geminiTts(String(text || '').slice(0, 1500), voice));
   // Ayarlar'daki "Bağlantıyı dene": ses göndermeden anahtar/model doğru mu diye küçük bir metin isteği
   ipcMain.handle('assistant:test', () => askAssistant(null, null,
@@ -639,7 +780,11 @@ function createTray() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => { if (win) { win.show(); win.focus(); } });
+  app.on('second-instance', (_e, argv) => {
+    const arg = argv.find(a => a.startsWith('--backup-now'));
+    if (arg) { backupBeforeTask((arg.split('=')[1] || '').replace(/[^\w.-]+/g, '-')); return; }   // pencereyi öne getirme
+    if (win) { win.show(); win.focus(); }
+  });
 
   app.whenReady().then(async () => {
     await ensureData();

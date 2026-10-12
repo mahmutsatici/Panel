@@ -721,3 +721,4 @@ kbd { background: var(--card-2); border: 1px solid var(--line); border-radius: 5
 .spark-form button { flex: none; width: 34px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; display: grid; place-items: center; padding: 0; }
 .spark-form button:disabled { opacity: .45; cursor: default; }
 .spark-form .ico { width: 16px; height: 16px; }
+.field .row { display: flex; gap: 6px; } .field .row input { flex: 1; min-width: 0; } .model-list li span b { font-weight: 600; }

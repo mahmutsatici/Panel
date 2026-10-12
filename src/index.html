@@ -240,6 +240,17 @@
               </datalist>
             </div>
             <p class="muted">Ücretsiz ses kotası model başına günde yaklaşık 10 cevaptır. Google AI Studio'daki "TTS" etiketli modelleri listeye ekleyerek günlük hakkı artırabilirsin; biri dolunca sıradakine geçilir, hepsi dolunca Windows sesine dönülür. "Dinle" de bir hak kullanır.</p>
+            <h3>Müzik (YouTube Music)</h3>
+            <p class="muted" id="ytmStatus"></p>
+            <div class="field"><span>Müzik listelerim <span class="muted">(SPARK önce bunlardan seçer ve karışık çalar)</span></span>
+              <ul class="model-list" id="musicListEl"></ul>
+              <div class="row">
+                <input id="musicName" placeholder="Liste adı (ör. Chill)" autocomplete="off" maxlength="40">
+                <input id="musicUrl" placeholder="Liste bağlantısı (music.youtube.com/playlist?list=…)" autocomplete="off" spellcheck="false">
+                <button type="button" id="musicAdd">Ekle</button>
+              </div>
+            </div>
+            <p class="muted">YouTube Music'te listeyi aç, adres çubuğundaki ya da paylaşım bağlantısını yapıştır. "Chill bir şeyler aç", "şu şarkıyı aç", "sonraki şarkı", "duraklat" gibi isteklerin sesli ya da yazılı çalışır.</p>
             <p class="muted">Sesin ve görev listenin metni yalnızca konuştuğun anda Google'ın sunucularına gönderilir; başka hiçbir yere kaydedilmez.</p>
           </section>
 

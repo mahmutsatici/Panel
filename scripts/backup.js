@@ -14,6 +14,33 @@ const userData = process.env.PANEL_PROFILE || path.join(process.env.APPDATA || '
 const dataDir = path.join(userData, 'data');
 const label = (process.argv.find(a => a.startsWith('--label=')) || '').slice(8).replace(/[^\w.-]+/g, '-');
 
+// 1) Kurulu Panel çalışıyorsa yedeği o alır (kendi gerçek veri görünümüyle). Betik sonucu bekler.
+// 2) Çalışmıyorsa ya da zaman aşımına uğrarsa bu betik kendi kopyalar (aşağıda).
+const { spawnSync } = require('child_process');
+const installed = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'masaustu-panel', 'Panel.exe');
+function viaApp() {
+  if (process.env.PANEL_PROFILE || process.argv.some(a => a.startsWith('--dir=')) || !fs.existsSync(installed)) return false;
+  const running = spawnSync('tasklist', ['/FI', 'IMAGENAME eq Panel.exe', '/FO', 'CSV', '/NH'], { encoding: 'utf8' }).stdout || '';
+  if (!/Panel\.exe/i.test(running)) return false;
+  const out = path.join(userData, 'backup-sonuc.json');
+  const t0 = Date.now();
+  spawnSync(installed, ['--backup-now=' + label], { windowsHide: true });   // çalışan örneğe iletir ve hemen çıkar
+  const deadline = t0 + 30000;
+  while (Date.now() < deadline) {
+    try {
+      const r = JSON.parse(fs.readFileSync(out, 'utf8'));
+      if (r.at >= t0 - 1000) {
+        if (!r.ok) { console.error('Uygulama yedeği alamadı: ' + r.error); return false; }
+        console.log(`Yedek alındı (uygulama) → ${r.dest}  (${r.files} öğe; şehir: ${r.city}, müzik listesi: ${r.lists})`);
+        return true;
+      }
+    } catch {}
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300);
+  }
+  return false;
+}
+if (viaApp()) process.exit(0);
+
 function fail(msg) { console.error('YEDEK ALINAMADI: ' + msg); process.exit(1); }
 
 if (!fs.existsSync(dataDir)) fail('veri klasörü yok: ' + dataDir);
@@ -21,7 +48,14 @@ let settings = {};
 try { settings = JSON.parse(fs.readFileSync(path.join(dataDir, 'settings.json'), 'utf8')); } catch {}
 // --dir=<yol>: kayıtlı klasör taşınmış/yeniden adlandırılmışsa geçici olarak başka klasöre yedekle
 const dirArg = (process.argv.find(a => a.startsWith("--dir=")) || "").slice(6);
-const dir = dirArg || settings.backup?.dir;
+let dir = dirArg || settings.backup?.dir;
+// Kayıtlı klasör yeniden adlandırılmışsa (ör. "Klasör" → "Klasor") Türkçe karakterleri ASCII yapıp bir de öyle dene
+const MAP = { ç: 'c', Ç: 'C', ğ: 'g', Ğ: 'G', ı: 'i', İ: 'I', ö: 'o', Ö: 'O', ş: 's', Ş: 'S', ü: 'u', Ü: 'U' };
+const ascii = p => p.replace(/[çÇğĞıİöÖşŞüÜ]/g, c => MAP[c]);
+if (dir && !fs.existsSync(dir) && fs.existsSync(ascii(dir))) {
+  console.warn('UYARI: kayıtlı yedek klasörü bulunamadı; şuraya yedeklendi: ' + ascii(dir) + ' (Ayarlar → Bildirim & yedek → yolu güncelle)');
+  dir = ascii(dir);
+}
 if (!dir) fail('uygulamada yedekleme klasörü seçilmemiş (Ayarlar → Bildirim & yedek).');
 if (!fs.existsSync(dir)) fail('yedekleme klasörü bulunamadı: ' + dir);
 
