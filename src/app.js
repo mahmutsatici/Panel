@@ -15,7 +15,7 @@ async function init() {
   $('#cardPool').remove();
 
   renderGreeting();
-  tickClock();
+  applyClockMode();   // saat görünümünü uygular ve ilk kez çizer
   setInterval(tickClock, 1000);
   await Promise.all([loadTodos(), loadNoteList()]);
   const last = store.get('lastNote', null);

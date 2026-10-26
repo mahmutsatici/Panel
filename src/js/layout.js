@@ -7,7 +7,7 @@
 // Üst çubuktaki "Düzenle" ile kartlar taşınır, gizlenir ve geri eklenir.
 const CARDS = {
   clock: 'Saat',
-  spark: 'SPARK',
+  spark: 'Spark',
   weather: 'Hava durumu',
   calendar: 'Takvim',
   stats: 'Özet',
@@ -48,6 +48,7 @@ function normalizeLayout(saved) {
   return l;
 }
 let layout = null;   // geçerli düzen (normalize edilmiş)
+let view = 'dashboard';   // 'dashboard' (pano: tüm kartlar) ya da tam ekran gösterilen kartın kimliği
 const cardEls = {};  // kart öğeleri: düzen yeniden kurulurken aynı öğeler taşınır
 const cardStore = document.createElement('div');   // gizli kartların bekleme yeri
 cardStore.hidden = true;
@@ -59,6 +60,22 @@ function applyLayout() {
   for (const id of Object.keys(CARDS)) cardEls[id] ||= document.querySelector(`.card[data-card="${id}"]`);
   const root = $('#layout');
   root.innerHTML = '';
+  addFullscreenButtons();
+  renderNav();
+  if (view !== 'dashboard') {
+    // Tam ekran: yalnızca seçili kart (gizlenmiş olsa bile) tüm alanı kaplar, diğerleri beklemeye alınır
+    const rowEl = document.createElement('div');
+    rowEl.className = 'lrow';
+    for (const id of Object.keys(CARDS)) if (id !== view) cardStore.append(cardEls[id]);
+    const el = cardEls[view];
+    el.hidden = false;
+    el.style.flexGrow = 1;
+    rowEl.append(el);
+    root.append(rowEl);
+    cardEls.weather.classList.remove('compact');   // tam ekranda hava durumu her zaman ayrıntılı
+    window.dispatchEvent(new Event('resize'));
+    return;
+  }
   layout.rows.forEach((row, ri) => {
     if (ri > 0) root.append(makeGutter('row', ri - 1, ri));
     const rowEl = document.createElement('div');
@@ -232,10 +249,12 @@ function renderEditTray() {
   tray.querySelectorAll('[data-show]').forEach(b => b.onclick = () => showCard(b.dataset.show));
 }
 function setEditing(on) {
+  if (on && view !== 'dashboard') setView('dashboard');   // düzen yalnızca panoda düzenlenir
   editingLayout = on;
   document.body.classList.toggle('editing', on);
   $('#editLayout').classList.toggle('on', on);
-  $('#editLayout').textContent = on ? '✓ Bitti' : '▦ Düzenle';
+  $('#editLayout').innerHTML = on ? ICON_DONE : ICON_EDIT;
+  $('#editLayout').title = on ? 'Düzenlemeyi bitir (Esc)' : 'Düzenle: kartları taşı, gizle, boyutlandır';
   $('#editBar').hidden = !on;
   if (on) { Object.keys(CARDS).forEach(ensureEditOverlay); renderEditTray(); closeCalDay?.(); }
 }
@@ -243,8 +262,69 @@ $('#editLayout').onclick = () => setEditing(!editingLayout);
 $('#layoutReset').onclick = () => { layout = clone(DEFAULT_LAYOUT); layout.compactWeather = !!settings.layout?.compactWeather; saveLayout(); };
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && editingLayout) setEditing(false); });
 
+// --- Simgeler (üst çubuk) ---
+const svgIcon = d => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+const ICON_EDIT = svgIcon('<rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><path d="M17 13.5v7M13.5 17h7"/>');
+const ICON_DONE = svgIcon('<path d="M5 12.5l4.5 4.5L19 7.5"/>');
+const NAV_ICONS = {
+  dashboard: svgIcon('<rect x="3.5" y="3.5" width="7" height="9" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="5" rx="1.5"/><rect x="13.5" y="11.5" width="7" height="9" rx="1.5"/><rect x="3.5" y="15.5" width="7" height="5" rx="1.5"/>'),
+  clock: svgIcon('<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>'),
+  spark: svgIcon('<path d="M12 3.5l1.8 5 5 1.8-5 1.8-1.8 5-1.8-5-5-1.8 5-1.8z"/><path d="M18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>'),
+  weather: svgIcon('<circle cx="9" cy="9" r="3.2"/><path d="M9 2.8v1.4M3.6 9H2.2M4.6 4.6l1 1M13.4 4.6l-1 1"/><path d="M8 19.5h9a3.5 3.5 0 0 0 .3-7 4.5 4.5 0 0 0-8.6 1.3A3 3 0 0 0 8 19.5z"/>'),
+  calendar: svgIcon('<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>'),
+  stats: svgIcon('<path d="M4 20h16"/><rect x="6" y="11" width="3" height="6.5" rx="1"/><rect x="10.5" y="6.5" width="3" height="11" rx="1"/><rect x="15" y="9" width="3" height="8.5" rx="1"/>'),
+  todos: svgIcon('<path d="M4 6.5l1.5 1.5L8 5.5M4 12.5l1.5 1.5L8 11.5M4 18.5l1.5 1.5L8 17.5M11 7h9M11 13h9M11 19h9"/>'),
+  notes: svgIcon('<path d="M6 3.5h8l4 4v13H6z"/><path d="M14 3.5v4h4M9 12h6M9 15.5h6"/>'),
+};
+$('#editLayout').innerHTML = ICON_EDIT;
+
+// --- Görünüm: pano ya da tek kart tam ekran ---
+// Üst çubuktaki gezinme düğmeleri ve her kartın başlığındaki ⤢ düğmesi aynı işi yapar.
+const FS_OPEN = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>';
+const FS_CLOSE = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>';
+function setView(id) {
+  view = id in CARDS ? id : 'dashboard';
+  document.body.classList.toggle('solo', view !== 'dashboard');
+  applyLayout();
+}
+function renderNav() {
+  const items = [['dashboard', 'Pano'], ...Object.entries(CARDS)];
+  const icons = !!settings.navIcons;
+  $('#viewNav').classList.toggle('icons', icons);
+  $('#viewNav').innerHTML = items.map(([id, name]) =>
+    `<button type="button" data-view="${id}" class="${id === view ? 'on' : ''}" title="${esc(name)}">${icons ? NAV_ICONS[id] : esc(name)}</button>`).join('');
+}
+$('#viewNav').onclick = e => { const b = e.target.closest('[data-view]'); if (b) setView(b.dataset.view); };
+// Her kartın başlık satırının sağına tam ekran düğmesi (bir kez eklenir; simgesi görünüme göre değişir)
+function addFullscreenButtons() {
+  for (const id of Object.keys(CARDS)) {
+    const head = cardEls[id]?.querySelector('.card-head');
+    if (!head) continue;
+    let btn = head.querySelector('.fs-btn');
+    if (!btn) {
+      let actions = head.querySelector(':scope > .actions');
+      if (!actions) {
+        // Başlıktan başka öğeler (ör. Notlar'daki ＋) varsa onları da sağdaki gruba al
+        actions = document.createElement('div');
+        actions.className = 'actions';
+        [...head.children].filter(c => c.tagName !== 'H2').forEach(c => actions.append(c));
+        head.append(actions);
+      }
+      btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'icon-btn fs-btn';
+      btn.onclick = () => setView(view === id ? 'dashboard' : id);
+      actions.append(btn);
+    }
+    const open = view === id;
+    btn.innerHTML = open ? FS_CLOSE : FS_OPEN;
+    btn.title = open ? 'Panoya dön' : 'Tam ekran';
+  }
+}
+
 // Ayarlar → Kartlar
-function renderLayoutSettings() { $('#compactWeather').checked = !!layout?.compactWeather; }
+function renderLayoutSettings() { $('#compactWeather').checked = !!layout?.compactWeather; $('#navIcons').checked = !!settings.navIcons; }
+$('#navIcons').onchange = async e => { settings = await api.settings.set({ navIcons: e.target.checked }); renderNav(); };
 $('#compactWeather').onchange = e => { layout.compactWeather = e.target.checked; saveLayout(); };
 $('#editLayoutFromSettings').onclick = () => { $('#settingsDlg').close(); setEditing(true); };
 $('#layoutResetFromSettings').onclick = () => { $('#layoutReset').click(); };

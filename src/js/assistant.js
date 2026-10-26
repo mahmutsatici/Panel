@@ -369,7 +369,7 @@ function setState(state, label) {
   asState = state;
   const text = label || STATE_LABELS[state] || '';
   $$('.spark-state').forEach(el => { el.textContent = text; el.dataset.state = state; });
-  for (const b of [$('#micBtn'), $('#sparkMic')]) {
+  for (const b of [$('#sparkMic')]) {
     b.classList.toggle('listening', state === 'listening');
     b.classList.toggle('busy', state === 'thinking' || state === 'speaking');
   }
@@ -413,7 +413,7 @@ function closeAssistant() {
 // Sonuç gösterilirken dışarı tıklamak küçük pencereyi kapatır; kayıt/düşünme/konuşma sürerken kesmez
 document.addEventListener('mousedown', e => {
   if (asPop.hidden || ['listening', 'thinking', 'speaking'].includes(asState)) return;
-  if (!e.target.closest('#assistantPop, #micBtn, #sparkMic')) closeAssistant();
+  if (!e.target.closest('#assistantPop, #sparkMic')) closeAssistant();
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && asState !== 'idle') closeAssistant(); });
 $('#asClose').onclick = closeAssistant;
@@ -617,7 +617,7 @@ async function previewVoice(voice) {
   setState('idle');
 }
 
-for (const b of [$('#micBtn'), $('#sparkMic')]) b.onclick = toggleListening;
+$('#sparkMic').onclick = toggleListening;
 $('#sparkForm').addEventListener('submit', e => {
   e.preventDefault();
   const input = $('#sparkText');

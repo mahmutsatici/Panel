@@ -13,13 +13,14 @@
 <body>
   <!-- Üst çubuk: düzenleme ve ayarlar (kartlardan bağımsız) -->
   <header class="topbar">
+    <!-- Gezinme: Pano (tüm kartlar) ya da tek kart tam ekran (js/layout.js → setView) -->
+    <nav class="tb-nav" id="viewNav"></nav>
     <div class="tb-edit" id="editBar" hidden>
       <div class="tb-tray" id="editTray"></div>
       <button type="button" class="tb-btn" id="layoutReset" title="Varsayılan düzene dön">↺ Varsayılan</button>
     </div>
     <div class="tb-actions">
-      <button type="button" class="tb-btn icon" id="micBtn" title="SPARK ile konuş (Ctrl+Alt+V)"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.5 21h7"/></svg></button>
-      <button type="button" class="tb-btn" id="editLayout" title="Kartları taşı, gizle, boyutlandır">▦ Düzenle</button>
+      <button type="button" class="tb-btn icon" id="editLayout" title="Düzenle: kartları taşı, gizle, boyutlandır"></button>
       <button type="button" class="tb-btn icon" id="openSettings" title="Ayarlar">⚙</button>
     </div>
   </header>
@@ -30,10 +31,13 @@
   <div id="cardPool" hidden>
     <!-- Saat & tarih -->
     <section class="card clock" data-card="clock">
-      <div class="card-head"><h2>Saat</h2></div>
+      <div class="card-head"><h2>Saat</h2>
+        <div class="actions"><button type="button" class="icon-btn" id="clockMode"></button></div>
+      </div>
       <div class="clock-body">
         <div class="greet" id="greet"></div>
         <div class="time" id="time">--:--</div>
+        <svg class="analog" id="analog" viewBox="0 0 200 200" aria-hidden="true"></svg>
         <div class="date" id="date"></div>
         <div class="sub" id="dayInfo"></div>
       </div>
@@ -42,7 +46,7 @@
     <!-- SPARK: sesli asistan kartı (küre animasyonu + konuşma geçmişi; js/assistant.js) -->
     <section class="card spark" data-card="spark">
       <div class="card-head">
-        <h2>SPARK <span class="spark-state"></span></h2>
+        <h2>Spark <span class="spark-state"></span></h2>
         <div class="actions">
           <button class="icon-btn" id="sparkClear" title="Konuşma geçmişini temizle"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12.2a1 1 0 0 0 1 .8h8a1 1 0 0 0 1-.8L18 7M9 7V4.5A.5.5 0 0 1 9.5 4h5a.5.5 0 0 1 .5.5V7"/></svg></button>
         </div>
@@ -133,11 +137,11 @@
   <!-- Görev son tarihi ve tekrarı için açılır pencere (js/core.js → pickDate) -->
   <div class="date-pop" id="datePop" hidden></div>
 
-  <!-- SPARK küçük penceresi: SPARK kartı gizliyken üst çubuktaki düğme / Ctrl+Alt+V ile açılır -->
+  <!-- Spark küçük penceresi: Spark kartı görünmüyorken Ctrl+Alt+V ile açılır -->
   <div class="assistant-pop" id="assistantPop" hidden>
     <div class="as-head">
       <canvas class="spark-orb as-orb"></canvas>
-      <div class="as-title"><b>SPARK</b><span class="spark-state"></span></div>
+      <div class="as-title"><b>Spark</b><span class="spark-state"></span></div>
       <button type="button" class="icon-btn" id="asClose" title="Kapat (Esc)">✕</button>
     </div>
     <p class="as-heard" id="asHeard"></p>
@@ -152,7 +156,7 @@
         <nav class="set-nav" id="setNav">
           <button type="button" data-page="general">Genel</button>
           <button type="button" data-page="look">Görünüm</button>
-          <button type="button" data-page="spark">SPARK</button>
+          <button type="button" data-page="spark">Spark</button>
           <button type="button" data-page="notify">Bildirim &amp; yedek</button>
           <button type="button" data-page="system">Sistem</button>
         </nav>
@@ -184,16 +188,17 @@
               </select>
             </label>
             <h3>Kartlar</h3>
-            <p class="muted">Kartların arasındaki boşlukları sürükleyerek genişlik ve yükseklikleri ayarlayabilirsin. Kartları taşımak, bir satırı 2 ya da 3 sütun yapmak veya kart gizlemek için üst çubuktaki <b>▦ Düzenle</b>'yi kullan.</p>
+            <p class="muted">Kartların arasındaki boşlukları sürükleyerek genişlik ve yükseklikleri ayarlayabilirsin. Kartları taşımak, bir satırı 2 ya da 3 sütun yapmak veya kart gizlemek için üst çubuktaki <b>Düzenle</b> simgesini kullan.</p>
             <div class="row">
               <button type="button" id="editLayoutFromSettings">▦ Düzeni düzenle</button>
               <button type="button" id="layoutResetFromSettings">↺ Varsayılan düzen</button>
             </div>
+            <label class="check"><input type="checkbox" id="navIcons"> Üst çubuktaki sekmeleri yazı yerine simge olarak göster</label>
             <label class="check"><input type="checkbox" id="compactWeather"> Hava durumu kartı sade (küçük) görünsün</label>
           </section>
 
           <section class="set-page" data-page="spark">
-            <h3>SPARK</h3>
+            <h3>Spark</h3>
             <p class="muted">SPARK, konuşarak görev ekleyebildiğin ve görevlerin hakkında soru sorabildiğin sesli asistanın. Mikrofon düğmesi ya da <kbd id="voiceShortcutLbl">Ctrl+Alt+V</kbd> ile konuşmaya başla. Google'ın <b>ücretsiz</b> Gemini API anahtarını kullanır — kredi kartı istemez, faturalandırma açmadıkça ücret çıkmaz.</p>
             <div class="row">
               <button type="button" id="geminiKeyGet">Ücretsiz anahtar al (Google AI Studio)</button>

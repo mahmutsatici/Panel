@@ -17,9 +17,14 @@ Saat, tarih, hava durumu, yapılacaklar, Markdown notlar ve sesli asistan SPARK 
   (`🔁` tekrar kuralı, `📅` son tarih; yorum içindeki zamanlar arka planda tutulur ve Markdown'da görünmez)
   Tekrar kuralları: `her gün`, `hafta içi`, `her hafta`, `her 2 hafta`, `her ay`, `her yıl`, `her N gün/hafta/ay`.
 - `notes\resimler\` — notlara yapıştırılan resimler. Notta `![resim|300](resimler/…)` olarak durur
-  (`|300` genişliktir; Obsidian ile aynı biçim).
+  (`|300` genişliktir; Obsidian ile aynı biçim). Resme tıklayınca büyür (tıklama/Esc kapatır); boyut çubuğu fareyle üstüne gelince çıkar.
 - Ayar güvenliği: `settings.json` her kayıtta `%APPDATA%\Panel\settings-yedek\son.json` ve yedek klasöründeki `Panel yedekleri\ayarlar.json` dosyalarına kopyalanır. Ayarlar bozulur/sıfırlanırsa uygulama açılışta bunlardan geri yükler; sürüm değişince önceki ayarlar `surum-<sürüm>-oncesi.json` olarak da saklanır (son 5). Tüm `%APPDATA%\Panel` silinirse `ayarlar.json`'u elle `data\settings.json` yerine kopyala.
 - Otomatik yedek: Ayarlar'da seçilen klasörde `Panel yedekleri\YYYY-AA-GG\` (son 7 gün).
+
+## Gezinme
+Üst çubukta **Pano** (tüm kartlar) ve her kart için bir sekme var; kart sekmesi o kartı tam ekran açar.
+Her kartın başlığındaki ⤢ düğmesi de aynı işi yapar (tam ekrandayken panoya döner). Düzen yalnızca panoda düzenlenir.
+Sekmeler Ayarlar → Görünüm'den yazı yerine simge olarak gösterilebilir. Tam ekranda kartlar daha fazla bilgi gösterir: hava durumunda 24 saat + 7 gün ve ayrıntılar, takvimde günlerin içinde görevler, özette seri/12 hafta/kategori dökümü, yapılacaklarda kategoriler yan yana paneller. Saat kartındaki düğme görünümü değiştirir (dijital, saniyeli, analog).
 
 ## Görev ekleme
 - Kategori başlığındaki **＋** kategorinin en üstünde, görev satırındaki **＋** o görevin hemen altında boş bir satır açar; doğrudan yazılır.
@@ -33,7 +38,7 @@ gün adları (`cuma`, `cumaya`…), `15 ekim`, `15.10`, `3 gün sonra`, `2 hafta
 
 ## SPARK (sesli asistan)
 Kendi kartında (küre + konuşma geçmişi) yaşar; kart gizliyse üst çubuğun altında küçük bir pencerede açılır.
-Kartın ya da üst çubuğun mikrofon düğmesi veya `Ctrl+Alt+V` ile başlar; tekrar basmak kaydı durdurup gönderir.
+Spark kartındaki mikrofon düğmesi veya `Ctrl+Alt+V` ile başlar (kart görünmüyorsa küçük pencerede açılır); tekrar basmak kaydı durdurup gönderir.
 Ses + o anki görev listesi tek bir Google Gemini isteğine gidiyor; hem konuşmayı anlama hem görev
 listesine bakıp cevap verme Gemini'de oluyor, ayrı bir yerel konuşma tanımaya gerek yok.
 

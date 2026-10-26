@@ -39,12 +39,13 @@ async function loadWeather(force = false) {
   const cache = settings.weatherCache;
   const cacheValid = cache && cache.lat === city.lat && cache.lon === city.lon;
   if (cacheValid) renderWeather(cache.data, cache.at, false);
-  if (!force && cacheValid && Date.now() - cache.at < WEATHER_TTL) return;
+  if (!force && cacheValid && cache.data.hourly && Date.now() - cache.at < WEATHER_TTL) return;
 
   const url = 'https://api.open-meteo.com/v1/forecast?' + new URLSearchParams({
-    latitude: city.lat, longitude: city.lon, timezone: 'auto', forecast_days: 4,
-    current: 'temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day',
-    daily: 'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max',
+    latitude: city.lat, longitude: city.lon, timezone: 'auto', forecast_days: 7, forecast_hours: 24,
+    current: 'temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,wind_direction_10m,is_day,pressure_msl,cloud_cover,uv_index',
+    hourly: 'temperature_2m,precipitation_probability,weather_code,is_day',
+    daily: 'weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max,precipitation_sum,uv_index_max,wind_speed_10m_max',
   });
   try {
     const res = await fetch(url);
@@ -59,52 +60,79 @@ async function loadWeather(force = false) {
   }
 }
 
+// Panoda yalnızca ana bilgiler (şu an + bugün + yağış/nem/rüzgar); tam ekranda (body.solo) ayrıntılar da
+// görünür: kutucuklar, 24 saatlik akış ve 7 günlük tahmin. Ayrıntılar CSS ile gizlenir (.w-full).
+const WIND_DIRS = ['K', 'KD', 'D', 'GD', 'G', 'GB', 'B', 'KB'];
+const windDir = deg => WIND_DIRS[Math.round(((deg % 360) + 360) % 360 / 45) % 8];
+const uvLevel = uv => (uv < 3 ? 'düşük' : uv < 6 ? 'orta' : uv < 8 ? 'yüksek' : uv < 11 ? 'çok yüksek' : 'aşırı');
+
 function renderWeather(d, at, offline) {
-  const c = d.current, day = d.daily;
+  const c = d.current, day = d.daily, hr = d.hourly;
   const [icon, desc] = wmo(c.weather_code, !!c.is_day);
   const r = Math.round;
   const hm = s => (s ? s.slice(11, 16) : '—');
   const rain = day.precipitation_probability_max || [];
   const chip = (i, label, val) => `<span class="chip">${img(i)}<span class="l">${label}</span><b>${val}</b></span>`;
+  const tile = (i, label, val, sub = '') => `<div class="w-tile">${img(i)}<div><span>${label}</span><b>${val}</b>${sub ? `<small>${sub}</small>` : ''}</div></div>`;
 
-  const days = day.time.slice(1, 4).map((t, i) => {
-    const k = i + 1;
+  // Tam ekran: kutucuklar (eski önbellekte olmayan alanlar "—" görünür)
+  const has = v => v !== undefined && v !== null;
+  const tiles = [
+    tile('thermometer', 'Hissedilen', `${r(c.apparent_temperature)}°`),
+    tile('humidity', 'Nem', `%${c.relative_humidity_2m}`),
+    tile('wind', 'Rüzgar', `${r(c.wind_speed_10m)} km/s`, has(c.wind_direction_10m) ? `${windDir(c.wind_direction_10m)} yönünden` : ''),
+    tile('barometer', 'Basınç', has(c.pressure_msl) ? `${r(c.pressure_msl)} hPa` : '—'),
+    tile('cloudy', 'Bulut', has(c.cloud_cover) ? `%${c.cloud_cover}` : '—'),
+    tile('uv-index', 'UV indeksi', has(c.uv_index) ? `${r(c.uv_index)}` : '—', has(c.uv_index) ? uvLevel(c.uv_index) : ''),
+    tile('umbrella', 'Bugün yağış', `%${rain[0] ?? 0}`, day.precipitation_sum ? `${day.precipitation_sum[0]} mm` : ''),
+    tile('sunrise', 'Gün doğumu', hm(day.sunrise[0])),
+    tile('sunset', 'Gün batımı', hm(day.sunset[0])),
+  ].join('');
+
+  // 24 saatlik akış
+  const hours = hr ? hr.time.map((t, i) => {
+    const [hi] = wmo(hr.weather_code[i], !!hr.is_day[i]);
+    const p = hr.precipitation_probability?.[i];
+    return `<div class="w-hour${i === 0 ? ' now' : ''}"><span>${i === 0 ? 'Şimdi' : t.slice(11, 16)}</span>${img(hi)}<b>${r(hr.temperature_2m[i])}°</b><small>${p ? `%${p}` : ''}</small></div>`;
+  }).join('') : '';
+
+  // 7 gün: en düşük–en yüksek aralığı haftanın genel aralığına göre çubukla gösterilir
+  const lo = Math.min(...day.temperature_2m_min), hiAll = Math.max(...day.temperature_2m_max), span = Math.max(1, hiAll - lo);
+  const week = day.time.map((t, k) => {
     const date = new Date(t + 'T12:00');
-    const name = k === 1 ? 'Yarın' : fmtWeekday.format(date);
+    const name = k === 0 ? 'Bugün' : k === 1 ? 'Yarın' : fmtWeekday.format(date);
     const [di, dd] = wmo(day.weather_code[k]);
-    const rp = rain[k];
-    return `<div class="w-day" title="${name}: ${dd}">
-      <div class="d">${name}</div>
-      <div class="dt">${fmtShortDate.format(date)}</div>
-      ${img(di, 'i', false, dd)}
-      <div class="desc">${dd}</div>
-      <div class="t"><span class="hi">${r(day.temperature_2m_max[k])}°</span><span class="lo">${r(day.temperature_2m_min[k])}°</span></div>
-      <div class="r" title="Yağış ihtimali">${rp ? `${img('raindrop')}%${rp}` : ''}</div>
+    const mn = day.temperature_2m_min[k], mx = day.temperature_2m_max[k];
+    return `<div class="w-row">
+      <span class="w-name">${name}<small>${fmtShortDate.format(date)}</small></span>
+      ${img(di)}<span class="w-rdesc">${dd}</span>
+      <span class="w-rain">${rain[k] ? `${img('raindrop')}%${rain[k]}` : ''}</span>
+      <span class="lo">${r(mn)}°</span>
+      <span class="w-range"><i style="left:${((mn - lo) / span) * 100}%;right:${((hiAll - mx) / span) * 100}%"></i></span>
+      <span class="hi">${r(mx)}°</span>
     </div>`;
   }).join('');
 
   $('#wBody').innerHTML = `
-    <div class="w-left">
-      <div class="w-now">
-        ${img(icon, 'w-icon', true, desc)}
-        <div class="w-temp">${r(c.temperature_2m)}°</div>
-        <div class="w-info">
-          <div class="w-desc">${desc}</div>
-          <div class="w-feel">Hissedilen ${r(c.apparent_temperature)}°</div>
-          <div class="w-feel">Bugün <span class="hi">↑ ${r(day.temperature_2m_max[0])}°</span> &nbsp;<span class="lo">↓ ${r(day.temperature_2m_min[0])}°</span></div>
-        </div>
-      </div>
-      <div class="chips">
-        ${chip('raindrop', 'Yağış', `%${rain[0] ?? 0}`)}
-        ${chip('humidity', 'Nem', `%${c.relative_humidity_2m}`)}
-        ${chip('wind', 'Rüzgar', `${r(c.wind_speed_10m)} km/s`)}
-      </div>
-      <div class="chips">
-        ${chip('sunrise', 'Gün doğumu', hm(day.sunrise[0]))}
-        ${chip('sunset', 'Gün batımı', hm(day.sunset[0]))}
+    <div class="w-now">
+      ${img(icon, 'w-icon', true, desc)}
+      <div class="w-temp">${r(c.temperature_2m)}°</div>
+      <div class="w-info">
+        <div class="w-desc">${desc}</div>
+        <div class="w-feel">Hissedilen ${r(c.apparent_temperature)}°</div>
+        <div class="w-feel">Bugün <span class="hi">↑ ${r(day.temperature_2m_max[0])}°</span> &nbsp;<span class="lo">↓ ${r(day.temperature_2m_min[0])}°</span></div>
       </div>
     </div>
-    <div class="w-days">${days}</div>`;
+    <div class="chips w-basic">
+      ${chip('raindrop', 'Yağış', `%${rain[0] ?? 0}`)}
+      ${chip('humidity', 'Nem', `%${c.relative_humidity_2m}`)}
+      ${chip('wind', 'Rüzgar', `${r(c.wind_speed_10m)} km/s`)}
+    </div>
+    <div class="w-full">
+      <div class="w-tiles">${tiles}</div>
+      ${hours ? `<section><h3>Önümüzdeki 24 saat</h3><div class="w-hours">${hours}</div></section>` : ''}
+      <section><h3>${day.time.length} günlük tahmin</h3><div class="w-week">${week}</div></section>
+    </div>`;
   $('#wStamp').textContent = `${offline ? '⚠ Çevrimdışı · ' : ''}${fmtTime.format(new Date(at))}`;
   $('#wStamp').title = 'Son güncelleme';
 }

@@ -86,9 +86,16 @@ function renderCalendar() {
       dot = `<span class="cal-dots ${state}">${'<i></i>'.repeat(Math.min(n, 3))}</span>`;
     }
     const tip = items.length ? `${open.length} açık / ${items.length} görev` : '';
-    html += `<button class="${cls.join(' ')}" data-iso="${iso}" title="${tip}"><span>${d.getDate()}</span>${dot}</button>`;
+    // Tam ekranda hücrenin içinde görev başlıkları görünür (panoda CSS ile gizli, yalnızca noktalar)
+    const sorted = partition(items.map(x => x.task)).map(t => items.find(x => x.task === t));
+    const chips = sorted.slice(0, 4).map(({ cat, task }) => {
+      const late = !task.done && iso < today;
+      return `<span class="cal-item${task.done ? ' done' : ''}${late ? ' late' : ''}" style="--c:${catColor(cat)}">${esc(task.text)}</span>`;
+    }).join('') + (sorted.length > 4 ? `<span class="cal-more">+${sorted.length - 4} daha</span>` : '');
+    html += `<button class="${cls.join(' ')}" data-iso="${iso}" title="${tip}"><span class="cal-n">${d.getDate()}</span>${dot}<span class="cal-items">${chips}</span></button>`;
   }
   const grid = $('#calGrid');
+  grid.style.setProperty('--weeks', weeks);
   grid.innerHTML = html;
   // Görevi bir günün üzerine sürükleyip bırakınca son tarihi o gün olur
   grid.querySelectorAll('.cal-d').forEach(b => {

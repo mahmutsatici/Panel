@@ -41,6 +41,84 @@ function computeStats() {
   const avg = durations.length ? durations.reduce((a, b) => a + b, 0) / durations.length : null;
   return { perDay, thisWeek, lastWeek, open, overdue, avg, avgCount: durations.length, todayIndex: dayDiffBetween(weekStart, today) };
 }
+// Tam ekran için ek istatistikler: günlük seri, aylık toplam, son 12 hafta, yaklaşan günler, kategori dökümü
+const fmtWeekLabel = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short' });
+const fmtDayShort = new Intl.DateTimeFormat('tr-TR', { weekday: 'short', day: 'numeric' });
+function computeMoreStats() {
+  const today = todayISO();
+  const doneByDay = new Map();
+  for (const { task } of allTasks()) {
+    if (!task.done || !task.completed) continue;
+    const d = task.completed.slice(0, 10);
+    doneByDay.set(d, (doneByDay.get(d) || 0) + 1);
+  }
+  let monthDone = 0;
+  for (const [d, n] of doneByDay) if (d.slice(0, 7) === today.slice(0, 7)) monthDone += n;
+  // Seri: bugünden (bugün henüz yoksa dünden) geriye doğru her gün en az bir görev bitirilmiş gün sayısı
+  let streak = 0;
+  for (let d = doneByDay.has(today) ? today : addDays(today, -1); doneByDay.has(d); d = addDays(d, -1)) streak++;
+  let best = 0, run = 0, prev = null;
+  for (const d of [...doneByDay.keys()].sort()) {
+    run = prev && addDays(prev, 1) === d ? run + 1 : 1;
+    best = Math.max(best, run);
+    prev = d;
+  }
+  const weekStart = addDays(today, -((parseISODate(today).getDay() + 6) % 7));
+  const weeks = Array.from({ length: 12 }, (_, i) => {
+    const ws = addDays(weekStart, -7 * (11 - i));
+    let n = 0;
+    for (let k = 0; k < 7; k++) n += doneByDay.get(addDays(ws, k)) || 0;
+    return { ws, n };
+  });
+  const openAll = allTasks().filter(x => !x.task.done);
+  const upcoming = Array.from({ length: 7 }, (_, i) => {
+    const iso = addDays(today, i);
+    return { iso, n: openAll.filter(x => x.task.due === iso).length };
+  });
+  const cats = activeCats().map(cat => {
+    const r = { cat, open: 0, late: 0, done: 0, week: 0 };
+    for (const t of cat.tasks) {
+      if (!t.done) { r.open++; if (t.due && t.due < today) r.late++; }
+      else { r.done++; if (t.completed && t.completed.slice(0, 10) >= weekStart) r.week++; }
+    }
+    return r;
+  });
+  return { todayDone: doneByDay.get(today) || 0, monthDone, streak, best, weeks, upcoming, cats };
+}
+function renderMoreStats(base) {
+  const m = computeMoreStats();
+  const tile = (val, label, cls = '') => `<div class="st-tile ${cls}"><b>${val}</b><span>${label}</span></div>`;
+  const wMax = Math.max(1, ...m.weeks.map(w => w.n));
+  const uMax = Math.max(1, ...m.upcoming.map(u => u.n));
+  const weeks = m.weeks.map((w, i) => `<div class="st-wk${i === 11 ? ' now' : ''}" title="${fmtWeekLabel.format(parseISODate(w.ws))} haftası: ${w.n} görev">
+      <span class="st-wv">${w.n || ''}</span><div class="st-wb" style="height:${w.n ? Math.max(4, (w.n / wMax) * 100) : 0}%"></div>
+      <span class="st-wl">${fmtWeekLabel.format(parseISODate(w.ws))}</span></div>`).join('');
+  const upcoming = m.upcoming.map((u, i) => `<div class="st-up-row"><span>${i === 0 ? 'Bugün' : i === 1 ? 'Yarın' : fmtDayShort.format(parseISODate(u.iso))}</span>
+      <div class="st-up-bar"><i style="width:${(u.n / uMax) * 100}%"></i></div><b>${u.n}</b></div>`).join('');
+  const rows = m.cats.map(r => {
+    const total = r.open + r.done;
+    return `<tr><td><span class="dot" style="--c:${catColor(r.cat)}"></span>${esc(r.cat.name)}</td><td>${r.open}</td>
+      <td class="${r.late ? 'late' : ''}">${r.late}</td><td>${r.week}</td><td>${r.done}</td>
+      <td><div class="st-prog" title="%${total ? Math.round((r.done / total) * 100) : 0} tamamlandı"><i style="width:${total ? (r.done / total) * 100 : 0}%"></i></div></td></tr>`;
+  }).join('');
+  return `<div class="st-full">
+    <div class="st-tiles">
+      ${tile(m.todayDone, 'bugün tamamlandı')}
+      ${tile(m.monthDone, 'bu ay tamamlandı')}
+      ${tile(`${m.streak} gün`, 'üst üste görev bitirme serisi')}
+      ${tile(`${m.best} gün`, 'en uzun seri')}
+      ${tile(base.open, 'açık görev')}
+      ${tile(base.overdue, 'geciken görev', base.overdue ? 'late' : '')}
+    </div>
+    <div class="st-two">
+      <section><h3>Son 12 hafta (tamamlanan)</h3><div class="st-weeks">${weeks}</div></section>
+      <section><h3>Önümüzdeki 7 gün (son tarihi olan açık görevler)</h3><div class="st-up">${upcoming}</div></section>
+    </div>
+    <section><h3>Kategoriler</h3>
+      <table class="st-cats"><thead><tr><th>Kategori</th><th>Açık</th><th>Geciken</th><th>Bu hafta biten</th><th>Toplam biten</th><th>İlerleme</th></tr></thead><tbody>${rows}</tbody></table>
+    </section>
+  </div>`;
+}
 const dayDiffBetween = (a, b) => Math.round((parseISODate(b) - parseISODate(a)) / 864e5);
 
 function renderStats() {
@@ -73,5 +151,5 @@ function renderStats() {
     <div class="st-side">
       <div class="st-kv"><b>${s.avg === null ? '—' : formatDuration(s.avg)}</b><span>ortalama bitirme süresi${s.avgCount ? ` (son 30 gün, ${s.avgCount} görev)` : ''}</span></div>
       <div class="st-kv"><b>${s.open}</b><span>açık görev${s.overdue ? ` · <em class="late">${s.overdue} geciken</em>` : ''}</span></div>
-    </div>`;
+    </div>` + renderMoreStats(s);   // tam ekran ayrıntıları (panoda CSS ile gizli)
 }

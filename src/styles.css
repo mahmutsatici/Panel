@@ -211,18 +211,16 @@ body.editing .card-edit {
 
 /* ---------- Hava ---------- */
 .w-stamp { font-size: var(--fs-meta); color: var(--muted); margin-right: 4px; }
-.w-body { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px 24px; align-items: center; }
-.w-body > p { grid-column: 1 / -1; margin: 0; }
-.w-left { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.w-left .w-now { margin-bottom: 8px; }
+.w-body { display: flex; flex-direction: column; gap: 12px; }
+.w-body > p { margin: 0; }
 .w-now { display: flex; align-items: center; gap: 12px; }
 .w-icon { width: 92px; height: 92px; margin: -12px -6px -12px -10px; }
 .w-temp { font-size: var(--fs-display); font-weight: 300; line-height: 1; letter-spacing: -1.5px; }
 .w-info { display: flex; flex-direction: column; gap: 2px; }
 .w-desc { font-size: var(--fs-lead); font-weight: 600; }
 .w-feel { color: var(--muted); font-size: var(--fs-sub); }
-.w-feel .hi { color: var(--warm); font-weight: 600; }
-.w-feel .lo { color: var(--cool); font-weight: 600; }
+.weather .hi { color: var(--warm); font-weight: 600; }
+.weather .lo { color: var(--cool); font-weight: 600; }
 .chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .chip {
   display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;
@@ -231,23 +229,43 @@ body.editing .card-edit {
 .chip img { width: 24px; height: 24px; }
 .chip .l { color: var(--muted); }
 .chip b { font-weight: 600; }
+[data-tone="light"] .w-icon { filter: drop-shadow(0 1px 2px rgba(30, 40, 70, .35)); }
 
-.w-days { display: flex; gap: 8px; }
-.w-day {
-  background: var(--card-2); border-radius: 14px; padding: 10px 8px 10px;
-  width: 104px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2px;
-}
-[data-tone="light"] .w-day { background: var(--card-3); }
-[data-tone="light"] .w-icon, [data-tone="light"] .w-day .i { filter: drop-shadow(0 1px 2px rgba(30, 40, 70, .35)); }
-.w-day .d { font-size: var(--fs-sub); font-weight: 600; }
-.w-day .dt { font-size: var(--fs-meta); color: var(--muted); }
-.w-day .i { width: 60px; height: 60px; margin: -4px 0 -6px; }
-.w-day .desc { font-size: var(--fs-sub); color: var(--muted); min-height: 32px; line-height: 1.3; display: grid; place-items: center; }
-.w-day .t { font-size: var(--fs-text); }
-.w-day .t .hi { color: var(--warm); font-weight: 600; }
-.w-day .t .lo { color: var(--cool); font-weight: 600; margin-left: 4px; }
-.w-day .r { font-size: var(--fs-meta); color: var(--rain); margin-top: 2px; min-height: 16px; display: flex; align-items: center; gap: 2px; }
-.w-day .r img { width: 18px; height: 18px; }
+/* Tam ekran ayrıntıları (panoda gizli) */
+.w-full { display: none; }
+body.solo .w-full { display: flex; flex-direction: column; gap: 18px; }
+body.solo .weather .w-body { gap: 18px; }
+body.solo .weather .w-icon { width: 140px; height: 140px; margin: -20px -10px -20px -16px; }
+body.solo .weather .w-temp { font-size: 76px; }
+body.solo .weather .w-desc { font-size: 22px; }
+body.solo .weather .w-basic { display: none; }   /* kutucuklarda zaten var */
+.w-full h3 { margin: 0 0 8px; font-size: var(--fs-sub); font-weight: 600; color: var(--muted); }
+.w-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+.w-tile { display: flex; align-items: center; gap: 6px; background: var(--card-2); border-radius: 12px; padding: 8px 12px 8px 6px; }
+.w-tile img { width: 40px; height: 40px; flex: none; }
+.w-tile div { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.w-tile span { font-size: var(--fs-meta); color: var(--muted); }
+.w-tile b { font-size: var(--fs-lead); font-weight: 600; }
+.w-tile small { font-size: var(--fs-meta); color: var(--muted); }
+.w-hours { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; }
+.w-hour { flex: none; width: 64px; display: flex; flex-direction: column; align-items: center; gap: 2px; background: var(--card-2); border-radius: 12px; padding: 8px 4px; }
+.w-hour.now { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.w-hour span { font-size: var(--fs-meta); color: var(--muted); }
+.w-hour img { width: 40px; height: 40px; margin: -4px 0; }
+.w-hour b { font-size: var(--fs-text); font-weight: 600; }
+.w-hour small { font-size: var(--fs-meta); color: var(--rain); min-height: 15px; }
+.w-week { display: flex; flex-direction: column; gap: 2px; }
+.w-row { display: grid; grid-template-columns: 110px 40px minmax(90px, 1fr) 60px 36px minmax(80px, 2fr) 36px; align-items: center; gap: 10px; padding: 4px 10px; border-radius: 10px; }
+.w-row:nth-child(odd) { background: var(--card-2); }
+.w-name { font-weight: 600; display: flex; flex-direction: column; line-height: 1.2; }
+.w-name small { font-weight: 400; font-size: var(--fs-meta); color: var(--muted); }
+.w-row img { width: 40px; height: 40px; }
+.w-rdesc { color: var(--muted); font-size: var(--fs-sub); }
+.w-rain { display: flex; align-items: center; font-size: var(--fs-sub); color: var(--rain); }
+.w-rain img { width: 22px; height: 22px; }
+.w-row .lo, .w-row .hi { text-align: right; }
+.w-range { position: relative; height: 6px; border-radius: 99px; background: var(--card-3); }
+.w-range i { position: absolute; top: 0; bottom: 0; border-radius: 99px; background: linear-gradient(90deg, var(--cool), var(--warm)); }
 
 /* ---------- Yapılacaklar ---------- */
 .search, .settings input, .settings select, .cat-input {
@@ -427,34 +445,21 @@ kbd { background: var(--card-2); border: 1px solid var(--line); border-radius: 5
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 8px; }
 
-/* Hava durumu kartı daraldıkça: önce günler küçülür, çok darsa alt alta dizilir */
-@container (max-width: 760px) {
-  .w-body { gap: 12px 16px; }
-  .w-days { gap: 6px; }
-  .w-day { width: 84px; padding: 8px 4px; }
-  .w-day .dt { display: none; }
-  .w-day .i { width: 48px; height: 48px; }
+/* Hava durumu kartı daraldıkça simge ve sıcaklık küçülür */
+@container (max-width: 420px) {
   .w-icon { width: 76px; height: 76px; }
   .w-temp { font-size: 42px; }
 }
-@container (max-width: 560px) {
-  .w-body { grid-template-columns: 1fr; }
-  .w-days { justify-self: start; }
-}
 
-/* Sade hava durumu: sadece anlık durum + küçük 3 gün */
+/* Sade hava durumu: sadece anlık durum */
 .weather.compact { padding: 12px 16px; }
 .weather.compact .card-head { margin-bottom: 4px; }
 .weather.compact .chips { display: none; }
-.weather.compact .w-left .w-now { margin-bottom: 0; }
 .weather.compact .w-icon { width: 60px; height: 60px; margin: -8px -4px; }
 .weather.compact .w-temp { font-size: 36px; }
 .weather.compact .w-desc { font-size: var(--fs-title); }
 .weather.compact .w-feel + .w-feel { display: none; }
-.weather.compact .w-day { width: 76px; padding: 6px 4px; }
-.weather.compact .w-day .dt, .weather.compact .w-day .desc, .weather.compact .w-day .r { display: none; }
-.weather.compact .w-day .i { width: 40px; height: 40px; margin: -2px 0; }
-.weather.compact .w-day .d { font-size: var(--fs-sub); }
+
 
 /* ---------- Son tarih ---------- */
 .due, .due-btn {
@@ -634,27 +639,54 @@ kbd { background: var(--card-2); border: 1px solid var(--line); border-radius: 5
 .cal-month { font-size: var(--fs-text); font-weight: 600; min-width: 104px; text-align: center; }
 .cal-month::first-letter { text-transform: uppercase; }
 .head-sub { font-size: var(--fs-sub); font-weight: 500; color: var(--muted); }
-.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+/* Takvim: ızgara kartın yüksekliğini doldurur; hücrede gün numarası yuvarlak içinde, altında görev noktaları */
+.card.calendar { display: flex; flex-direction: column; }
+.cal-grid {
+  flex: 1; min-height: 0; display: grid; gap: 3px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-rows: auto repeat(var(--weeks, 6), minmax(22px, 1fr));
+}
 .cal-wd { text-align: center; font-size: var(--fs-meta); font-weight: 600; color: var(--muted); padding-bottom: 4px; }
 .cal-wd.we { color: color-mix(in srgb, var(--muted) 70%, var(--load-3)); }
 .cal-d {
-  position: relative; border: 0; background: none; border-radius: 9px; height: 31px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
-  font-size: var(--fs-sub); font-variant-numeric: tabular-nums;
+  position: relative; border: 0; background: none; border-radius: 10px; min-height: 0; padding: 2px; overflow: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  font-size: var(--fs-sub); font-variant-numeric: tabular-nums; color: var(--text);
 }
 .cal-d:hover { background: var(--card-2); }
-.cal-d.other { color: var(--muted); opacity: .45; }
-.cal-d.we span { color: color-mix(in srgb, var(--text) 75%, var(--load-3)); }
-.cal-d.today span { color: var(--accent); font-weight: 750; }
-.cal-d.today { box-shadow: inset 0 0 0 1.5px var(--accent); }
-.cal-d.sel { background: var(--accent); }
-.cal-d.sel span { color: #fff !important; font-weight: 700; }
-.cal-dots { display: flex; gap: 2px; height: 4px; }
+.cal-n { height: min(28px, 100%); aspect-ratio: 1; flex: none; display: grid; place-items: center; border-radius: 50%; }
+/* noktalar numaranın altında, satır yüksekliği almadan */
+.cal-d .cal-dots { position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); }
+.cal-d.other { opacity: .4; }
+.cal-d.we .cal-n { color: color-mix(in srgb, var(--text) 75%, var(--load-3)); }
+.cal-d.sel { background: var(--accent-soft); }
+.cal-d.sel .cal-n { color: var(--accent); font-weight: 700; }
+.cal-d.today .cal-n { background: var(--accent); color: #fff; font-weight: 700; }
+.cal-dots { display: flex; gap: 3px; height: 4px; }
 .cal-dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--accent); }
 .cal-dots.overdue i { background: var(--load-3); }
 .cal-dots.today i { background: var(--load-2); }
 .cal-dots.done i { background: var(--load-0); }
-.cal-d.sel .cal-dots i { background: #fff; }
+.cal-items { display: none; }
+
+/* Tam ekran: her gün bir kutu, içinde görev başlıkları (kategori rengiyle) */
+body.solo .calendar .cal-grid { gap: 6px; }
+body.solo .calendar .cal-wd { font-size: var(--fs-sub); text-align: left; padding: 0 8px 4px; }
+body.solo .calendar .cal-d { align-items: stretch; justify-content: flex-start; padding: 6px; border: 1px solid var(--line); text-align: left; }
+body.solo .calendar .cal-d.sel { border-color: var(--accent); }
+body.solo .calendar .cal-n { height: 26px; width: 26px; align-self: flex-start; }
+.cal-item, .cal-more { flex: none; }   /* sığmayan görevler kırpılır, sıkışmaz */
+body.solo .calendar .cal-dots { display: none; }
+body.solo .calendar .cal-items { display: flex; flex-direction: column; gap: 3px; min-height: 0; overflow: hidden; }
+.cal-item {
+  display: block; padding: 1px 6px; border-radius: 5px; border-left: 3px solid var(--c);
+  background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--text);
+  font-size: var(--fs-meta); line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cal-item.done { opacity: .55; text-decoration: line-through; }
+.cal-item.late { color: var(--load-3); font-weight: 600; }
+.cal-more { font-size: var(--fs-meta); color: var(--muted); padding-left: 6px; }
+
 .cal-day {
   position: fixed; z-index: 30; padding: 12px 12px 10px;
   background: var(--card); border: 1px solid var(--line); border-radius: 14px;
@@ -722,3 +754,100 @@ kbd { background: var(--card-2); border: 1px solid var(--line); border-radius: 5
 .spark-form button:disabled { opacity: .45; cursor: default; }
 .spark-form .ico { width: 16px; height: 16px; }
 .field .row { display: flex; gap: 6px; } .field .row input { flex: 1; min-width: 0; } .model-list li span b { font-weight: 600; }
+
+/* ---------- Gezinme: pano / tam ekran kart ---------- */
+.tb-nav { display: flex; align-items: center; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.tb-nav button {
+  border: 0; background: transparent; color: var(--muted); border-radius: 8px;
+  padding: 5px 11px; font-size: var(--fs-sub); font-weight: 600; white-space: nowrap;
+}
+.tb-nav button:hover { background: var(--card); color: var(--text); }
+.tb-nav button.on { background: var(--accent-soft); color: var(--accent); }
+body.editing .tb-nav { display: none; }
+.fs-btn .ico { width: 15px; height: 15px; }
+/* Tam ekranda saat büyüsün, ortada dursun */
+body.solo .clock-body { align-items: center; text-align: center; }
+body.solo .clock .time { font-size: min(16vw, 30vh); }
+body.solo .clock .date { font-size: min(4vw, 5vh); }
+body.solo .clock .greet { font-size: min(2.6vw, 3.4vh); }
+
+/* ---------- Not resimleri: tıklayınca büyüt ---------- */
+#noteEditor .toastui-editor-ww-container img:not(.ProseMirror-separator) { cursor: zoom-in; }
+.lightbox { position: fixed; inset: 0; z-index: 300; background: rgba(0, 0, 0, .82); display: grid; place-items: center; cursor: zoom-out; }
+.lightbox[hidden] { display: none; }
+.lightbox img { max-width: 94vw; max-height: 90vh; border-radius: 8px; box-shadow: 0 20px 60px rgba(0, 0, 0, .5); }
+/* Dar takvim kartında başlık satırı taşmasın: ay adı daralır, "Bugün" en dar durumda gizlenir */
+.calendar .card-head .actions { gap: 0; }
+.calendar .cal-month { min-width: 0; padding: 0 2px; }
+@container (max-width: 370px) { .calendar #calToday { display: none; } }
+/* Dar kartta başlık satırı: başlık ve simge düğmeleri (tam ekran dahil) hep görünür, yazılı düğmeler kısalır */
+.card-head h2 { flex: none; }
+.card-head .actions { min-width: 0; }
+.card-head .actions .icon-btn { flex: none; }
+.card-head .actions .text-btn { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- Özet: tam ekran ayrıntıları ---------- */
+.st-full { display: none; }
+body.solo .stats .st-full { display: flex; flex-direction: column; gap: 22px; margin-top: 22px; }
+body.solo .stats .st-body { grid-template-columns: auto minmax(220px, 1fr) auto; }
+body.solo .stats .st-chart { height: 110px; }
+.st-full h3 { margin: 0 0 10px; font-size: var(--fs-sub); font-weight: 600; color: var(--muted); }
+.st-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+.st-tile { background: var(--card-2); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; }
+.st-tile b { font-size: 26px; font-weight: 600; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.st-tile span { font-size: var(--fs-meta); color: var(--muted); }
+.st-tile.late b { color: var(--load-3); }
+.st-two { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 24px; }
+.st-weeks { display: grid; grid-template-columns: repeat(12, 1fr); gap: 6px; height: 150px; }
+.st-wk { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; min-width: 0; }
+.st-wb { width: min(26px, 75%); background: color-mix(in srgb, var(--accent) 55%, transparent); border-radius: 4px 4px 0 0; }
+.st-wk.now .st-wb { background: var(--accent); }
+.st-wv { font-size: var(--fs-meta); font-weight: 600; }
+.st-wl { font-size: 10.5px; color: var(--muted); white-space: nowrap; border-top: 1px solid var(--line); padding-top: 3px; width: 100%; text-align: center; }
+.st-up { display: flex; flex-direction: column; gap: 6px; }
+.st-up-row { display: grid; grid-template-columns: 76px 1fr 28px; align-items: center; gap: 10px; font-size: var(--fs-sub); }
+.st-up-row b { text-align: right; }
+.st-up-bar { height: 8px; border-radius: 99px; background: var(--card-2); overflow: hidden; }
+.st-up-bar i { display: block; height: 100%; background: var(--load-2); border-radius: 99px; }
+.st-cats { width: 100%; border-collapse: collapse; font-size: var(--fs-sub); }
+.st-cats th { text-align: left; font-weight: 600; color: var(--muted); font-size: var(--fs-meta); padding: 0 10px 6px; }
+.st-cats td { padding: 8px 10px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.st-cats td:first-child { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.st-cats td.late { color: var(--load-3); font-weight: 600; }
+.st-cats .dot { background: var(--c); }
+.st-prog { height: 8px; min-width: 120px; border-radius: 99px; background: var(--card-2); overflow: hidden; }
+.st-prog i { display: block; height: 100%; background: var(--load-0); border-radius: 99px; }
+
+/* ---------- Yapılacaklar: geniş alanda (tam ekran ya da geniş kart) her kategori ayrı panel ---------- */
+@container (min-width: 720px) {
+  .todo-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; align-items: start; }
+  .todo-list .cat { margin: 0; background: var(--card-2); border: 1px solid var(--line); border-radius: 14px; padding: 4px 6px 8px; }
+  .todo-list .cat li:hover, .todo-list .cat li.editing, .todo-list .cat-head .cnt { background: var(--card-3); }
+  .todo-list .cat .cat-head { border-bottom: 1px solid var(--line); border-radius: 10px 10px 0 0; margin-bottom: 4px; padding: 10px 8px 8px; }
+}
+
+/* ---------- Üst çubuk simgeleri ---------- */
+.tb-btn.icon .ico { width: 17px; height: 17px; }
+.tb-nav.icons button { padding: 6px 9px; }
+.tb-nav .ico { width: 18px; height: 18px; display: block; }
+#clockMode .ico { width: 16px; height: 16px; }
+
+/* ---------- Saat görünümleri ---------- */
+.clock .analog { display: none; }
+.clock[data-mode="analog"] .time { display: none; }
+.clock[data-mode="analog"] .analog { display: block; flex: 1 1 0; min-height: 70px; width: 100%; max-height: 220px; margin: 4px 0; }
+body.solo .clock[data-mode="analog"] .analog { max-height: none; min-height: 0; margin: 8px 0; }
+.clock[data-mode="seconds"] .time { font-size: 46px; }
+body.solo .clock[data-mode="seconds"] .time { font-size: min(12vw, 26vh); }
+.analog .face { fill: var(--card-2); stroke: var(--line); stroke-width: 2; }
+.analog .tk { stroke: var(--muted); stroke-width: 1.2; stroke-linecap: round; opacity: .55; }
+.analog .tk.big { stroke: var(--text); stroke-width: 3; opacity: .9; }
+.analog text { fill: var(--muted); font-size: 17px; font-weight: 600; text-anchor: middle; }
+.analog .hand { stroke-linecap: round; }
+.analog .hand.h { stroke: var(--text); stroke-width: 6; }
+.analog .hand.m { stroke: var(--text); stroke-width: 4; }
+.analog .hand.s { stroke: var(--danger); stroke-width: 1.8; }
+.analog .pin { fill: var(--danger); }
+.st-full { grid-column: 1 / -1; }   /* özet ızgarasının tüm genişliğini kaplasın */
+/* Tam ekran Spark: sohbet okunaklı genişlikte ortada */
+body.solo .spark .spark-body { width: 100%; max-width: 860px; margin: 0 auto; }

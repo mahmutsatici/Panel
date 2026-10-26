@@ -126,14 +126,43 @@ function setImageWidth(img, width) {
   view.dispatch(view.state.tr.setNodeMarkup(pos, null, { ...node.attrs, altText }));
 }
 
+// Resmi büyüt: tıklayınca pencereyi kaplayan görüntü açılır; tıklama ya da Esc kapatır
+const lightbox = document.createElement('div');
+lightbox.className = 'lightbox';
+lightbox.hidden = true;
+lightbox.title = 'Kapatmak için tıkla (Esc)';
+lightbox.innerHTML = '<img alt="">';
+document.body.append(lightbox);
+lightbox.onclick = () => { lightbox.hidden = true; };
+document.addEventListener('keydown', e => { if (e.key === 'Escape') lightbox.hidden = true; });
+
+// Boyut araç çubuğu artık fareyle resmin üstüne gelince görünür (tıklama büyütmeye ayrıldı)
+let barHideTimer = null, resizingImage = false;
+function scheduleBarHide() {
+  clearTimeout(barHideTimer);
+  barHideTimer = setTimeout(() => { if (!resizingImage) hideImageBar(); }, 350);
+}
+
 function setupImageResize() {
   const root = $('#noteEditor');
   root.addEventListener('click', e => {
     const img = e.target.closest(WW_IMG);
     if (!img) return;
+    lightbox.querySelector('img').src = img.src;
+    lightbox.hidden = false;
+  });
+  root.addEventListener('mouseover', e => {
+    const img = e.target.closest(WW_IMG);
+    if (!img) return;
+    clearTimeout(barHideTimer);
     imgTarget = img;
     positionImageBar();
   });
+  root.addEventListener('mouseout', e => { if (e.target.closest(WW_IMG)) scheduleBarHide(); });
+  for (const el of [imgBar, imgHandle]) {
+    el.addEventListener('mouseenter', () => clearTimeout(barHideTimer));
+    el.addEventListener('mouseleave', scheduleBarHide);
+  }
   root.querySelector('.toastui-editor-ww-container')?.addEventListener('scroll', () => imgTarget && positionImageBar(), true);
   document.addEventListener('mousedown', e => {
     if (imgTarget && !e.target.closest('.img-bar, .img-handle') && e.target !== imgTarget) hideImageBar();
@@ -147,6 +176,7 @@ function setupImageResize() {
   // Köşe tutamacı: sürükledikçe önizle, bırakınca kaydet
   imgHandle.addEventListener('mousedown', e => {
     e.preventDefault();
+    resizingImage = true;
     const img = imgTarget, startX = e.clientX, startW = img.getBoundingClientRect().width;
     const sel = `${WW_IMG}[src="${CSS.escape(img.getAttribute('src'))}"]`;
     let w = startW;
@@ -160,6 +190,7 @@ function setupImageResize() {
     const up = () => {
       document.removeEventListener('mousemove', move);
       document.removeEventListener('mouseup', up);
+      resizingImage = false;
       setImageWidth(img, w);
       resizeCss = '';
       requestAnimationFrame(() => { refreshImageSizes(); followImageTarget(); });
