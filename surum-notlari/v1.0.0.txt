@@ -1,0 +1,10 @@
+Panel 1.0.0 — İlk kararlı sürüm
+========================================
+
+• Saat, tarih ve karşılama; hava durumu (şehir ayardan seçilir).
+• Yapılacaklar: kategoriler, tarih ve tekrar kuralları, doğal dil ("yarın", "her hafta"), sürükle-bırak.
+• Takvim: görevlerin son tarihleri günlerin altında nokta olarak.
+• Özet kartı: haftalık tamamlanan görevler.
+• Markdown notlar: görsel editör, resim yapıştırma ve boyutlandırma, silinenler (geri getirilebilir çöp kutusu).
+• Sistem tepsisi, Windows ile otomatik başlatma, sabah bildirimi, otomatik yedek.
+• Temalar: koyu, lacivert, açık, krem, sistem. Kart düzeni düzenlenebilir.

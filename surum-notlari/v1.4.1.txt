@@ -1,0 +1,8 @@
+Panel 1.4.1 — Ayar güvenliği ve yedekler
+========================================
+
+• Ayarlar her kayıtta AppData ve yedek klasörüne aynalanır; bozulursa açılışta geri yüklenir.
+• Sürüm değişince önceki ayarlar saklanır.
+• İşlem öncesi yedek komutu (npm run backup).
+• Görev çubuğundaki Electron logosu düzeltildi.
+• Ses modelleri liste olarak; API anahtarı ve modeller kendiliğinden kaydedilir.

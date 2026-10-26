@@ -43,6 +43,8 @@ const DEFAULT_SETTINGS = {
   // Model adı da ayardan değiştirilebilir — Google'ın güncel model kimliği Ayarlar'daki isimle
   // birebir aynı olmayabilir, kullanıcı Google AI Studio'daki tam kimliği yapıştırmalı.
   geminiApiKey: null, geminiModel: 'gemini-flash-lite-latest',
+  // Ana model "yoğun talep" (503), kota (429) ya da bulunamadı (404) hatası verirse sırayla denenen yedek modeller (virgülle ayrılmış)
+  geminiFallbackModels: 'gemini-flash-latest,gemini-2.5-flash-lite,gemini-2.5-flash',
   // SPARK'ın sesi (Gemini TTS). ttsModels virgülle ayrılmış listedir ve sırayla denenir: birinin günlük
   // ücretsiz kotası dolarsa sıradakine geçilir; hepsi doluysa arayüz yerel Windows sesine (Tolga) döner.
   ttsEnabled: true, ttsVoice: 'Kore',
@@ -415,11 +417,16 @@ async function geminiFetch(url, body, ms) {
     throw e;
   }
 }
+// Bu hatalarda aynı istek başka bir modelle denenir: yoğun talep/geçici hata (500/503/504), dakikalık kota (429),
+// model kimliği yok/desteklenmiyor (404, 400). Anahtar hataları (401/403) denenmez, doğrudan söylenir.
+const FALLBACK_STATUS = new Set([429, 500, 503, 504, 404]);
+const isOverloaded = (status, msg) => FALLBACK_STATUS.has(status) || /high demand|overloaded|unavailable|try again later|not found|not supported/i.test(msg || '');
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
 async function askAssistant(audioBytes, mimeType, contextText) {
   const s = await readSettings();
   if (!s.geminiApiKey) throw new Error('Gemini API anahtarı girilmemiş (Ayarlar → Sesli asistan).');
   if (!s.geminiModel) throw new Error('Gemini model adı girilmemiş (Ayarlar → Sesli asistan).');
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(s.geminiModel)}:generateContent?key=${encodeURIComponent(s.geminiApiKey)}`;
   // audioBytes boşsa (ör. Ayarlar'daki bağlantı testi) sadece metinle istek atılır
   const parts = [{ text: contextText }];
   if (audioBytes) parts.push({ inlineData: { mimeType, data: Buffer.from(audioBytes).toString('base64') } });
@@ -428,27 +435,42 @@ async function askAssistant(audioBytes, mimeType, contextText) {
     contents: [{ role: 'user', parts }],
     generationConfig: { responseMimeType: 'application/json', responseSchema: ASSISTANT_RESPONSE_SCHEMA },
   };
-  // Bağlantı ya da Gemini takılırsa 25 sn sonra vazgeçilir (arayüz sonsuza kadar "düşünüyor"da kalmasın).
-  // Model ara sıra bozuk/kesik JSON döndürebiliyor; bir kez daha denenir (kota: 1 istek daha)
-  let lastWhy = '';
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const res = await geminiFetch(url, body, 25000);
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      let msg = `Gemini isteği başarısız (${res.status})`;
-      try { msg = JSON.parse(errText)?.error?.message || msg; } catch {}
-      throw new Error(msg);
+  const models = [s.geminiModel, ...String(s.geminiFallbackModels || '').split(',').map(x => x.trim()).filter(Boolean)]
+    .filter((x, i, arr) => arr.indexOf(x) === i);
+  let lastErr = null, lastWhy = '';
+  for (let mi = 0; mi < models.length; mi++) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(models[mi])}:generateContent?key=${encodeURIComponent(s.geminiApiKey)}`;
+    // Aynı modelde: ağ/zaman aşımı hatası ya da bozuk JSON'da bir kez daha; yoğunlukta hemen sıradaki modele geç
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let res;
+      try { res = await geminiFetch(url, body, 20000); }
+      catch (e) { lastErr = e; break; }   // zaman aşımı/bağlantı: sıradaki modeli dene
+      if (!res.ok) {
+        const errText = await res.text().catch(() => '');
+        let msg = `Gemini isteği başarısız (${res.status})`;
+        try { msg = JSON.parse(errText)?.error?.message || msg; } catch {}
+        lastErr = new Error(msg);
+        if (isOverloaded(res.status, msg)) break;   // sıradaki modele geç
+        throw lastErr;                               // anahtar/istek hatası: yedek model çözmez
+      }
+      const data = await res.json();
+      const cand = data?.candidates?.[0];
+      const text = cand?.content?.parts?.map(x => x.text || '').join('');
+      let out = null;
+      if (text) {
+        try { out = JSON.parse(text); } catch {
+          // Çevresinde fazladan metin/kod bloğu varsa asıl JSON'u ayıkla
+          const obj = text.match(/\{[\s\S]*\}/)?.[0];
+          if (obj) { try { out = JSON.parse(obj); } catch {} }
+        }
+      }
+      if (out) { if (mi > 0) console.warn(`SPARK: yanıt yedek modelden geldi (${models[mi]})`); return out; }
+      lastWhy = text ? `çözümlenemedi (${cand?.finishReason || 'bilinmiyor'})` : 'boş yanıt';
+      lastErr = null;
     }
-    const data = await res.json();
-    const cand = data?.candidates?.[0];
-    const text = cand?.content?.parts?.map(x => x.text || '').join('');
-    if (!text) { lastWhy = 'boş yanıt'; continue; }
-    try { return JSON.parse(text); } catch {}
-    // Çevresinde fazladan metin/kod bloğu varsa asıl JSON'u ayıkla
-    const obj = text.match(/\{[\s\S]*\}/)?.[0];
-    if (obj) { try { return JSON.parse(obj); } catch {} }
-    lastWhy = `çözümlenemedi (${cand?.finishReason || 'bilinmiyor'})`;
+    if (mi < models.length - 1) await sleep(250);
   }
+  if (lastErr) throw new Error(`${lastErr.message}${models.length > 1 ? ` (${models.length} model denendi)` : ''}`);
   throw new Error(`Gemini yanıtı ${lastWhy}; ses anlaşılamamış olabilir, tekrar dene.`);
 }
 

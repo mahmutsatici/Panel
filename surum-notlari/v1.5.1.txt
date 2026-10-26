@@ -1,0 +1,5 @@
+Panel 1.5.1 — Uygulama içi yedek
+========================================
+
+• İşlem öncesi yedeği çalışan uygulamanın kendisi alıyor.
+• Yedek betiği yeniden adlandırılmış klasörü ASCII yolla deniyor.

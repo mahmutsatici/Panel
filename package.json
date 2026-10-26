@@ -1,7 +1,7 @@
 {
   "name": "masaustu-panel",
   "productName": "Panel",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Saat, hava durumu, yapılacaklar, Markdown notlar ve sesli asistan için kişisel masaüstü paneli",
   "main": "main.js",
   "private": true,
@@ -11,7 +11,9 @@
     "icon": "node scripts/make-icon.js",
     "dist": "npm run build && electron-builder --win nsis",
     "backup": "node scripts/backup.js",
-    "predist": "node scripts/backup.js --label=dist"
+    "predist": "node scripts/backup.js --label=dist",
+    "notes": "node scripts/release-notes.js",
+    "postdist": "node scripts/release-notes.js"
   },
   "build": {
     "appId": "local.masaustu.panel",

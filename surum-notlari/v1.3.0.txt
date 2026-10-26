@@ -1,0 +1,7 @@
+Panel 1.3.0 — Görev düzenleme ve hava durumu bağlamı
+========================================
+
+• Spark görevleri tamamlıyor, geri açıyor, siliyor ve güncelliyor.
+• Spark tarihi, saati, hava durumunu ve görev listesini biliyor ("bugün hava nasıl?").
+• Konuşma bitince kendiliğinden gönderme (sessizlik algılama, ayarlanabilir).
+• SVG mikrofon ve temizle simgeleri.

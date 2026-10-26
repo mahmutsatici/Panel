@@ -210,6 +210,13 @@
               <input id="geminiModelInput" placeholder="ör. gemini-flash-lite-latest" autocomplete="off" spellcheck="false">
             </label>
             <p class="muted">Google AI Studio'daki listeden <b>"Flash Lite"</b> etiketli bir modelin tam kimliğini yapıştır; günlük en yüksek ücretsiz kullanım hakkı onda. Alanlar değiştikçe kendiliğinden kaydedilir.</p>
+            <div class="field"><span>Yedek konuşma modelleri <span class="muted">(ana model yoğunsa ya da hata verirse sırayla denenir)</span></span>
+              <ul class="model-list" id="fallbackModelList"></ul>
+              <div class="row">
+                <input id="fallbackModelAdd" list="ttsModelSuggest" placeholder="Model kimliği ekle…" autocomplete="off" spellcheck="false">
+                <button type="button" id="fallbackModelAddBtn">Ekle</button>
+              </div>
+            </div>
             <div class="row">
               <button type="button" id="geminiTest">Bağlantıyı dene</button>
             </div>

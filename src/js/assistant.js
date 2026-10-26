@@ -65,7 +65,8 @@ function drawOrb(cv, pal) {
   ctx.clearRect(0, 0, w, h);
   const cx = w / 2, cy = h / 2, L = orb.level, t = orb.t;
   const thinking = asState === 'thinking';
-  const breathe = asState === 'idle' || asState === 'added' || asState === 'answer' ? Math.sin(t * 1.3) * 0.04 : 0;
+  const breathe = asState === 'idle' || asState === 'added' || asState === 'answer' ? Math.sin(t * 1.3) * 0.04
+    : thinking ? Math.sin(t * 4) * 0.03 : 0;
   const R = Math.min(w, h) * 0.3 * (1 + breathe + L * 0.32);
 
   // Dış ışıma
@@ -99,6 +100,19 @@ function drawOrb(cv, pal) {
     ctx.fill();
   }
   ctx.globalCompositeOperation = 'source-over';
+  if (thinking) {
+    // Düşünme halkası: küreyi saran, saat yönünde dönen ve boyu salınan yay (iki parçalı, kuyruğu solar)
+    const ring = R * 1.32;
+    for (let k = 0; k < 2; k++) {
+      const start = t * 3.2 + k * Math.PI, len = 1.1 + Math.sin(t * 2.4 + k) * 0.35;
+      const g = ctx.createLinearGradient(cx - ring, cy, cx + ring, cy);
+      g.addColorStop(0, rgba(pal[1], 0)); g.addColorStop(0.5, rgba(pal[0], 0.95)); g.addColorStop(1, rgba(pal[2], 0.15));
+      ctx.beginPath();
+      ctx.arc(cx, cy, ring, start, start + len);
+      ctx.strokeStyle = g; ctx.lineWidth = Math.max(2, R * 0.09); ctx.lineCap = 'round';
+      ctx.stroke();
+    }
+  }
 }
 let lastFrame = 0;
 function orbLoop(ts) {
@@ -360,7 +374,7 @@ async function blobToWav(blob) {
 
 // ============ Görünüm: durum, küçük pencere, konuşma geçmişi ============
 const STATE_LABELS = {
-  idle: 'hazır', listening: 'dinliyor…', thinking: 'düşünüyor…', speaking: 'konuşuyor…',
+  idle: 'hazır', listening: 'dinliyor…', thinking: 'düşünüyor', speaking: 'konuşuyor…',
   added: 'eklendi ✓', done: 'tamam ✓', asking: 'soruyor', answer: 'cevap verdi', error: 'bir sorun oluştu',
 };
 const listeningLabel = () => (Number(settings.sparkSilenceMs ?? 1500) ? 'dinliyor… (sustuğunda gönderilir)' : 'dinliyor… (bitirmek için tekrar bas)');
@@ -375,7 +389,11 @@ function setState(state, label) {
   }
   // Kart görünmüyorsa etkileşimi küçük pencerede göster
   if (state !== 'idle' && !sparkCardVisible()) asPop.hidden = false;
+  // "Yazıyor" balonu düşünme başlayınca eklenir, bitince kalkar
+  if (typeof renderLog === 'function' && (state === 'thinking') !== wasThinking) renderLog();
+  wasThinking = state === 'thinking';
 }
+let wasThinking = false;
 function showExchange(heard, answer) {
   $('#asHeard').textContent = heard ? `"${heard}"` : '';
   $('#asAnswer').textContent = answer || '';
@@ -383,13 +401,14 @@ function showExchange(heard, answer) {
 const fmtLogTime = new Intl.DateTimeFormat('tr-TR', { hour: '2-digit', minute: '2-digit' });
 function renderLog() {
   const ul = $('#sparkLog');
-  if (!sparkLog.length) {
+  const typing = asState === 'thinking' && !voicePrep ? '<li class="msg spark thinking"><span class="dots"><i></i><i></i><i></i></span></li>' : '';
+  if (!sparkLog.length && !typing) {
     ul.innerHTML = '<li class="spark-empty">Mikrofona basıp konuş: "yarın rapor yaz ekle iş kategorisine" ya da "bugün neler var?"</li>';
     return;
   }
   ul.innerHTML = sparkLog.map(e => `
     ${e.heard ? `<li class="msg me"><span>${esc(e.heard)}</span></li>` : ''}
-    ${e.answer ? `<li class="msg spark ${e.kind}"><span>${esc(e.answer)}</span><time>${fmtLogTime.format(new Date(e.at))}</time></li>` : ''}`).join('');
+    ${e.answer ? `<li class="msg spark ${e.kind}"><span>${esc(e.answer)}</span><time>${fmtLogTime.format(new Date(e.at))}</time></li>` : ''}`).join('') + typing;
   ul.scrollTop = ul.scrollHeight;
 }
 let tempEntry = null;   // yazılı mesaj gönderildi, cevap bekleniyor (balon hemen görünsün)
@@ -600,8 +619,8 @@ async function handleResponse(res) {
 async function sayAndShow(text, endState) {
   if (typedMode) { setState(endState); return 'sessiz'; }   // yazılı sohbet: sessiz cevap
   // Gemini sesi birkaç saniyede hazırlanır; yazı ekranda zaten görünüyor, durum bunu belirtsin
-  setState('thinking', 'ses hazırlanıyor…');
-  voicePrep = true;
+  voicePrep = true;   // önce işaretle: "yazıyor" balonu yalnızca cevap beklenirken görünsün
+  setState('thinking', 'ses hazırlanıyor');
   const used = await speak(text, undefined, () => { voicePrep = false; setState('speaking'); });
   voicePrep = false;
   if (asState !== 'speaking') return null;   // bu arada kapatıldı / sözü kesildi

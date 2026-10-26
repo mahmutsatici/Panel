@@ -1,0 +1,5 @@
+Panel 1.6.0 — Tam ekran ve gezinme
+========================================
+
+• Üst çubukta Pano ve her kart için sekme; her kartın başlığında tam ekran düğmesi.
+• Not resimleri tıklayınca büyüyor.

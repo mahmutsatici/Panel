@@ -60,6 +60,7 @@ listesine bakıp cevap verme Gemini'de oluyor, ayrı bir yerel konuşma tanımay
   ücretsiz bir API anahtarı al (kredi kartı istemez), yapıştır. Model alanına Google AI Studio'daki model
   listesinden **"Flash Lite"** etiketli birinin tam kimliğini yapıştır — ücretsiz kullanımda günlük en
   yüksek istek hakkını bu veriyor. Anahtar ve modeller `settings.json`'da kalır, koda hiç girmez.
+- **Yedek model:** ana model "yoğun talep" / kota / bulunamadı hatası verirse Ayarlar → Spark → Yedek konuşma modelleri sırayla denenir.
 - Ses ve görev listesi metni yalnızca konuştuğun anda Google'a gider; konuşma geçmişi yalnızca bu bilgisayarda tutulur (son 30).
 
 ## Kod yapısı

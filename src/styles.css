@@ -851,3 +851,55 @@ body.solo .clock[data-mode="seconds"] .time { font-size: min(12vw, 26vh); }
 .st-full { grid-column: 1 / -1; }   /* özet ızgarasının tüm genişliğini kaplasın */
 /* Tam ekran Spark: sohbet okunaklı genişlikte ortada */
 body.solo .spark .spark-body { width: 100%; max-width: 860px; margin: 0 auto; }
+
+/* ---------- Özet: bölümler birbirinden ayrı ---------- */
+.st-body { align-items: stretch; gap: 14px; }
+.st-box { background: var(--card-2); border-radius: 14px; padding: 12px 14px; min-width: 0; }
+.st-hero { justify-content: center; gap: 2px; }
+.st-chart.st-box { height: auto; min-height: 96px; padding: 12px 14px 8px; }
+.st-side.st-box { justify-content: center; gap: 12px; }
+.st-side .st-kv + .st-kv { border-top: 1px solid var(--line); padding-top: 10px; }
+@container (max-width: 560px) { .st-body { grid-template-columns: 1fr 1fr; } .st-chart.st-box { grid-column: 1 / -1; order: 3; } .st-side.st-box { grid-column: auto; flex-direction: column; } }
+@container (max-width: 400px) { .st-body { grid-template-columns: 1fr; } }
+body.solo .stats .st-body { grid-template-columns: minmax(180px, 1fr) minmax(280px, 3fr) minmax(220px, 1.4fr); gap: 16px; }
+body.solo .stats .st-chart.st-box { min-height: 150px; }
+body.solo .stats .st-full { gap: 28px; margin-top: 28px; }
+.st-tile { padding: 14px 16px; border: 1px solid var(--line); background: var(--card-2); }
+.st-tiles { gap: 12px; }
+.st-two { gap: 28px; }
+.st-two section, .st-full > section { background: var(--card-2); border-radius: 14px; padding: 16px 18px; }
+.st-cats td { padding: 10px 10px; }
+
+/* ---------- Takvim: bugün çok daha belirgin ---------- */
+.cal-d.today { background: color-mix(in srgb, var(--accent) 14%, transparent); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.cal-d.today .cal-n { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent); font-weight: 750; }
+body.solo .calendar .cal-d.today { background: color-mix(in srgb, var(--accent) 14%, var(--card)); border: 2px solid var(--accent); box-shadow: 0 0 22px color-mix(in srgb, var(--accent) 28%, transparent); }
+body.solo .calendar .cal-d.today::after {
+  content: 'BUGÜN'; position: absolute; top: 8px; right: 8px; font-size: 10px; font-weight: 750; letter-spacing: .8px;
+  color: var(--accent); background: var(--accent-soft); padding: 1px 7px; border-radius: 99px;
+}
+body.solo .calendar .cal-d.today .cal-n { font-size: var(--fs-lead); }
+
+/* ---------- Hava durumu: panoda içerik ortada ---------- */
+.card.weather { display: flex; flex-direction: column; }
+body:not(.solo) .weather .w-body { flex: 1; justify-content: center; align-items: center; }
+body:not(.solo) .weather .w-now { justify-content: center; }
+body:not(.solo) .weather .chips { justify-content: center; }
+body.solo .weather .w-body { align-items: stretch; }
+
+/* ---------- Analog saat: yazılarla birlikte ortalı, genişleyince kaymaz ---------- */
+.clock[data-mode="analog"] .clock-body { align-items: center; text-align: center; }
+.clock[data-mode="analog"] .analog { flex: 1 1 0; width: auto; height: auto; min-height: 0; max-height: none; aspect-ratio: 1; max-width: 100%; align-self: center; margin: 6px 0; }
+
+/* ---------- Spark: düşünüyor animasyonu ---------- */
+.spark-log .msg.thinking span { display: inline-flex; padding: 9px 12px; }
+.dots { display: inline-flex; gap: 5px; align-items: center; }
+.dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: dot-bounce 1.2s ease-in-out infinite; }
+.dots i:nth-child(2) { animation-delay: .15s; }
+.dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes dot-bounce { 0%, 60%, 100% { transform: translateY(0); opacity: .45; } 30% { transform: translateY(-5px); opacity: 1; } }
+.spark-state[data-state="thinking"]::after {
+  content: ''; display: inline-block; width: 1.2em; text-align: left; animation: ellipsis 1.2s steps(4) infinite;
+}
+@keyframes ellipsis { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+body.solo .stats .st-side .st-kv:nth-child(2) { display: none; }   /* açık/geciken zaten kutucuklarda */

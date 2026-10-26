@@ -39,6 +39,7 @@ function fillSettingsDialog() {
   $('#ttsEnabled').checked = settings.ttsEnabled !== false;
   $('#ttsVoice').value = settings.ttsVoice || 'Kore';
   renderTtsModels();
+  renderFallbackModels();
   renderMusicLists();
   refreshYtmStatus();
   $('#sparkSilence').value = String(settings.sparkSilenceMs ?? 1500);
@@ -66,30 +67,33 @@ async function saveSpark(patch) {
 $('#geminiKeyInput').addEventListener('change', e => saveSpark({ geminiApiKey: e.target.value.trim() || null }));
 $('#geminiModelInput').addEventListener('change', e => saveSpark({ geminiModel: e.target.value.trim() || null }));
 
-// Ses modelleri: ana süreçte virgülle ayrılmış metin olarak durur, burada liste olarak düzenlenir
-const ttsModelList = () => String(settings.ttsModels || '').split(',').map(m => m.trim()).filter(Boolean);
-function renderTtsModels() {
-  const ul = $('#ttsModelList'), models = ttsModelList();
-  ul.innerHTML = models.length
-    ? models.map((m, i) => `<li><span>${esc(m)}</span><button type="button" class="icon-btn" data-i="${i}" title="Listeden çıkar">✕</button></li>`).join('')
-    : '<li class="muted">Model yok — SPARK Windows sesiyle konuşur.</li>';
+// Model listeleri (ses modelleri, yedek konuşma modelleri): ayarda virgülle ayrılmış metin olarak durur,
+// burada ✕ ile çıkarılan / Ekle ile eklenen satırlar olarak düzenlenir.
+function modelListEditor({ key, list, input, addBtn, emptyText }) {
+  const items = () => String(settings[key] || '').split(',').map(m => m.trim()).filter(Boolean);
+  const render = () => {
+    const models = items();
+    $(list).innerHTML = models.length
+      ? models.map((m, i) => `<li><span>${esc(m)}</span><button type="button" class="icon-btn" data-i="${i}" title="Listeden çıkar">✕</button></li>`).join('')
+      : `<li class="muted">${emptyText}</li>`;
+  };
+  const save = async models => { settings = await api.settings.set({ [key]: models.join(',') }); render(); };
+  $(list).onclick = e => {
+    const i = e.target.closest('button')?.dataset.i;
+    if (i != null) save(items().filter((_, j) => j !== Number(i)));
+  };
+  const add = () => {
+    const v = $(input).value.trim();
+    if (!v) return;
+    $(input).value = '';
+    if (!items().includes(v)) save([...items(), v]);
+  };
+  $(addBtn).onclick = add;
+  $(input).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+  return render;
 }
-async function saveTtsModels(models) {
-  settings = await api.settings.set({ ttsModels: models.join(',') });
-  renderTtsModels();
-}
-$('#ttsModelList').onclick = e => {
-  const i = e.target.closest('button')?.dataset.i;
-  if (i != null) saveTtsModels(ttsModelList().filter((_, j) => j !== Number(i)));
-};
-function addTtsModel() {
-  const v = $('#ttsModelAdd').value.trim();
-  if (!v) return;
-  $('#ttsModelAdd').value = '';
-  if (!ttsModelList().includes(v)) saveTtsModels([...ttsModelList(), v]);
-}
-$('#ttsModelAddBtn').onclick = addTtsModel;
-$('#ttsModelAdd').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addTtsModel(); } });
+const renderTtsModels = modelListEditor({ key: 'ttsModels', list: '#ttsModelList', input: '#ttsModelAdd', addBtn: '#ttsModelAddBtn', emptyText: 'Model yok — Spark Windows sesiyle konuşur.' });
+const renderFallbackModels = modelListEditor({ key: 'geminiFallbackModels', list: '#fallbackModelList', input: '#fallbackModelAdd', addBtn: '#fallbackModelAddBtn', emptyText: 'Yedek model yok — ana model hata verirse işlem başarısız olur.' });
 
 $('#geminiTest').onclick = async () => {
   $('#geminiStatus').textContent = 'Deneniyor…';

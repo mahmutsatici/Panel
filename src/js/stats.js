@@ -142,13 +142,13 @@ function renderStats() {
   }).join('');
 
   box.innerHTML = `
-    <div class="st-hero">
+    <div class="st-hero st-box">
       <div class="st-num">${s.thisWeek}</div>
       <div class="st-lbl">bu hafta tamamlandı</div>
       <div class="st-delta ${delta > 0 ? 'up' : delta < 0 ? 'down' : ''}">${deltaTxt}</div>
     </div>
-    <div class="st-chart" role="img" aria-label="Bu hafta günlere göre tamamlanan görevler: ${s.perDay.map((n, i) => `${STAT_DAYS[i]} ${n}`).join(', ')}">${bars}</div>
-    <div class="st-side">
+    <div class="st-chart st-box" role="img" aria-label="Bu hafta günlere göre tamamlanan görevler: ${s.perDay.map((n, i) => `${STAT_DAYS[i]} ${n}`).join(', ')}">${bars}</div>
+    <div class="st-side st-box">
       <div class="st-kv"><b>${s.avg === null ? '—' : formatDuration(s.avg)}</b><span>ortalama bitirme süresi${s.avgCount ? ` (son 30 gün, ${s.avgCount} görev)` : ''}</span></div>
       <div class="st-kv"><b>${s.open}</b><span>açık görev${s.overdue ? ` · <em class="late">${s.overdue} geciken</em>` : ''}</span></div>
     </div>` + renderMoreStats(s);   // tam ekran ayrıntıları (panoda CSS ile gizli)

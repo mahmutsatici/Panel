@@ -1,0 +1,6 @@
+Panel 1.2.0 — Spark kartı ve gerçekçi ses
+========================================
+
+• Asistanın adı Spark; kendi kartı: ses seviyesine tepki veren küre ve konuşma geçmişi.
+• Gemini TTS ile gerçekçi ses, ses tonu seçimi, Windows sesine otomatik geçiş.
+• Ayarlar kategorilere bölündü.

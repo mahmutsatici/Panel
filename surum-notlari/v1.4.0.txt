@@ -1,0 +1,6 @@
+Panel 1.4.0 — Yazılı sohbet ve tasarım birliği
+========================================
+
+• Spark kartında yazılı sohbet; aynı konuşmadan devam, tek mesajda birden fazla görev.
+• Tüm panellerde aynı başlık satırı ve tek yazı ölçeği.
+• Gemini isteklerine zaman aşımı ve bozuk yanıt için yeniden deneme.

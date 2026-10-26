@@ -1,0 +1,6 @@
+Panel 1.5.0 — Tarayıcı ve müzik
+========================================
+
+• Spark tarayıcıda sayfa açıyor (varsayılan tarayıcıda yeni sekme).
+• YouTube Music (Chrome uygulaması): şarkı arama, listelerini karışık çalma, duraklat/sonraki/önceki/ses.
+• Ayarlar → Spark → Müzik listelerim.

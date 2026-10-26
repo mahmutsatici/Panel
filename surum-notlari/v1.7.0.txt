@@ -1,0 +1,9 @@
+Panel 1.7.0 — Tasarım turu
+========================================
+
+• Saat: dijital, saniyeli ve analog görünüm.
+• Hava durumu: panoda sade; tam ekranda 24 saat, 7 gün ve ayrıntı kutuları.
+• Takvim yeniden tasarlandı; tam ekranda günlerin içinde görevler.
+• Özet tam ekranda seri, 12 hafta, 7 gün yükü ve kategori tablosu.
+• Yapılacaklar geniş alanda kategori panelleri.
+• Mikrofon üst çubuktan kalktı; Düzenle yalnızca simge; sekmeler isteğe bağlı simge.

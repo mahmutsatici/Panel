@@ -1,0 +1,12 @@
+Panel 1.8.0 — Yedek model, düşünme animasyonu, tasarım cilası
+========================================
+
+• Gemini "yoğun talep" (503) / kota (429) / bulunamadı (404) hatası verirse Spark otomatik olarak yedek modellere geçer.
+  Yedek modeller Ayarlar → Spark → "Yedek konuşma modelleri" listesinden düzenlenir (varsayılan: gemini-flash-latest, gemini-2.5-flash-lite, gemini-2.5-flash).
+  Anahtar hatalarında (401/403) yedek denenmez, hata açıkça gösterilir.
+• Spark düşünürken: küre etrafında dönen halka, sohbette üç noktalı "yazıyor" balonu ve hareketli "düşünüyor…" yazısı.
+• Özet: bölümler ayrı kutularda, daha ferah; tam ekranda tekrar eden bilgiler kaldırıldı.
+• Takvim: bugün çok daha belirgin (vurgulu hücre, parlama, tam ekranda "BUGÜN" etiketi).
+• Hava durumu: panoda içerik ortalandı.
+• Analog saat: kart genişleyince yazılardan bağımsız kaymıyor; saat ve yazılar birlikte ortalı.
+• Her sürümün notu artık dist/v<sürüm>/Surum-Notlari.txt dosyasında (eski sürümlere de eklendi).

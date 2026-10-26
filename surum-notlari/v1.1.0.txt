@@ -1,0 +1,5 @@
+Panel 1.1.0 — Sesli asistan
+========================================
+
+• Gemini tabanlı sesli asistan: mikrofona basıp (ya da Ctrl+Alt+V) konuşarak görev ekleme ve görevler hakkında soru sorma.
+• Kategori söylenmezse asistan sorar; takvimde ilgili günü açar.
