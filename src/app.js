@@ -8,6 +8,7 @@ async function init() {
   base.href = settings.notesUrl;
   document.head.prepend(base);
 
+  cloudInit();           // bulut hesabı (isteğe bağlı; yapılandırma yoksa hiçbir şey yapmaz)
   applyTheme();
   applyLayout();
   createEditor();

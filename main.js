@@ -682,6 +682,7 @@ function registerIpc() {
   // notesUrl: notlardaki göreli resim yollarının (resimler/…) çözüleceği klasör
   const withRuntime = s => ({
     ...s, isPackaged: app.isPackaged, shortcut: SHORTCUT, voiceShortcut: VOICE_SHORTCUT,
+    cloudEmulator: process.env.PANEL_FIREBASE_EMULATOR === '1',   // geliştirme: Firebase emülatörüne bağlan
     notesUrl: pathToFileURL(notesDir()).href + '/',
   });
   ipcMain.handle('settings:get', async () => withRuntime(await readSettings()));

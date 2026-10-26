@@ -47,6 +47,41 @@ function fillSettingsDialog() {
   renderNotifyBackup();
 }
 
+// --- Hesap (bulut girişi; isteğe bağlı) ---
+function renderAccount() {
+  const out = $('#acctSignedOut'), inn = $('#acctSignedIn'), st = $('#acctStatus');
+  if (!cloud.enabled) {
+    out.hidden = inn.hidden = true;
+    st.textContent = 'Bu sürümde bulut hesabı yapılandırılmamış; Panel tamamen yerel çalışıyor.';
+    return;
+  }
+  st.textContent = cloud.ready ? '' : 'Oturum kontrol ediliyor…';
+  out.hidden = !!cloud.user || !cloud.ready;
+  inn.hidden = !cloud.user;
+  $('#acctUser').textContent = cloud.user?.email || '';
+}
+cloud.onChange(renderAccount);
+async function acctSignIn() {
+  const st = $('#acctStatus');
+  st.classList.remove('err');
+  st.textContent = 'Giriş yapılıyor…';
+  const err = await cloud.signIn($('#acctEmail').value, $('#acctPass').value);
+  $('#acctPass').value = '';
+  if (err) { st.classList.add('err'); st.textContent = err; }
+}
+$('#acctSignIn').onclick = acctSignIn;
+$('#acctPass').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); acctSignIn(); } });
+$('#acctEmail').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#acctPass').focus(); } });
+$('#acctReset').onclick = async () => {
+  const st = $('#acctStatus');
+  st.classList.remove('err');
+  if (!$('#acctEmail').value.trim()) { st.classList.add('err'); st.textContent = 'Önce e-postanı yaz.'; return; }
+  const err = await cloud.resetPassword($('#acctEmail').value);
+  st.classList.toggle('err', !!err);
+  st.textContent = err || 'Şifre sıfırlama e-postası gönderildi (gelen kutunu ve istenmeyenleri kontrol et).';
+};
+$('#acctSignOut').onclick = () => cloud.signOut();
+
 // --- Kategoriler: soldaki menü sağdaki sayfayı seçer; son açılan sayfa hatırlanır ---
 function showSettingsPage(page) {
   $$('#setNav button').forEach(b => b.classList.toggle('active', b.dataset.page === page));

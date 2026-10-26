@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: file: https:; connect-src https://api.open-meteo.com https://geocoding-api.open-meteo.com">
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob: file: https:; connect-src https://api.open-meteo.com https://geocoding-api.open-meteo.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://firestore.googleapis.com http://127.0.0.1:9099 http://127.0.0.1:8080">
   <title>Panel</title>
   <link rel="stylesheet" href="../node_modules/@fontsource-variable/inter/index.css">
   <link rel="stylesheet" href="vendor/editor.css">
@@ -156,6 +156,7 @@
         <nav class="set-nav" id="setNav">
           <button type="button" data-page="general">Genel</button>
           <button type="button" data-page="look">Görünüm</button>
+          <button type="button" data-page="account">Hesap</button>
           <button type="button" data-page="spark">Spark</button>
           <button type="button" data-page="notify">Bildirim &amp; yedek</button>
           <button type="button" data-page="system">Sistem</button>
@@ -195,6 +196,28 @@
             </div>
             <label class="check"><input type="checkbox" id="navIcons"> Üst çubuktaki sekmeleri yazı yerine simge olarak göster</label>
             <label class="check"><input type="checkbox" id="compactWeather"> Hava durumu kartı sade (küçük) görünsün</label>
+          </section>
+
+          <section class="set-page" data-page="account">
+            <h3>Hesap</h3>
+            <p class="muted" id="acctStatus"></p>
+            <div id="acctSignedOut" hidden>
+              <label>E-posta
+                <input id="acctEmail" type="email" autocomplete="username" spellcheck="false">
+              </label>
+              <label>Şifre
+                <input id="acctPass" type="password" autocomplete="current-password">
+              </label>
+              <div class="row">
+                <button type="button" id="acctSignIn" class="primary">Giriş yap</button>
+                <button type="button" id="acctReset">Şifremi unuttum</button>
+              </div>
+            </div>
+            <div id="acctSignedIn" hidden>
+              <p>Giriş yapıldı: <b id="acctUser"></b></p>
+              <div class="row"><button type="button" id="acctSignOut">Çıkış yap</button></div>
+            </div>
+            <p class="muted">Giriş <b>isteğe bağlıdır</b>: girmezsen Panel bugünkü gibi tamamen bu bilgisayarda çalışır. Giriş yalnızca ortak (paylaşılan) kategoriler içindir. Hesaplar yöneticin tarafından açılır; kayıt yoktur.</p>
           </section>
 
           <section class="set-page" data-page="spark">
@@ -326,6 +349,9 @@
   <script src="../node_modules/dompurify/dist/purify.min.js"></script>
   <script src="vendor/editor.js"></script>
   <script src="js/core.js"></script>
+  <script src="vendor/cloud.js"></script>
+  <script src="js/cloud-config.js"></script>
+  <script src="js/cloud.js"></script>
   <script src="js/clock.js"></script>
   <script src="js/weather.js"></script>
   <script src="js/todos.js"></script>

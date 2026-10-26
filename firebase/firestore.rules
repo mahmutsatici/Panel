@@ -1,0 +1,98 @@
+rules_version = '2';
+
+// Panel — ortak kategoriler için güvenlik kuralları.
+// Bu kurallar sunucu tarafındaki TEK savunmadır: istemci kodu ne yaparsa yapsın buradaki izinler aşılamaz.
+// Her değişiklikten sonra: npm run test:rules (Firebase emülatörü + firebase/tests/rules.test.js)
+//
+// Modelin özeti:
+//   allowed/{uid}              izin listesi — yalnızca proje sahibi konsoldan yazar. Listede olmayan hiçbir şey okuyamaz/yazamaz.
+//   admins/{uid}               yönetici listesi — yalnızca konsoldan yazılır.
+//   categories/{cid}           ortak kategori: ad, sahip (e-posta), uyeler (e-posta listesi)
+//   categories/{cid}/tasks/{tid}  görevler
+//
+// İzin listesi e-posta değil UID ile tutulur: biri izin listesindeki bir kişinin e-postasıyla önceden hesap açsa bile
+// UID'si farklı olacağından hiçbir erişimi olmaz.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function allowedDoc() { return /databases/$(database)/documents/allowed/$(request.auth.uid); }
+    function activeUser() { return signedIn() && exists(allowedDoc()) && get(allowedDoc()).data.aktif == true; }
+    function me() { return request.auth.token.email.lower(); }
+
+    // Hesap kayıtları: kimse listeleyemez (e-posta taraması yapılamasın); herkes yalnızca kendi belgesini okur.
+    match /allowed/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list, write: if false;
+    }
+    match /admins/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list, write: if false;
+    }
+
+    match /categories/{cid} {
+      function isOwner() { return resource.data.sahip == me(); }
+      function isMember() { return me() in resource.data.uyeler; }
+      function validCat(d) {
+        return d.keys().hasOnly(['ad', 'sahip', 'uyeler', 'uyeAdlari', 'olusturma'])
+          && d.ad is string && d.ad.size() > 0 && d.ad.size() <= 60
+          && d.sahip is string
+          && d.uyeler is list && d.uyeler.size() >= 1 && d.uyeler.size() <= 20
+          && d.sahip in d.uyeler;
+      }
+
+      allow create: if activeUser() && validCat(request.resource.data)
+        && request.resource.data.sahip == me()
+        && request.resource.data.olusturma == request.time
+        && request.resource.data.uyeler.size() == 1;   // sahibi kurar; diğerleri sonra eklenir
+
+      allow get: if activeUser() && isMember();
+      allow list: if activeUser() && isMember();   // yalnızca "uyeler array-contains <ben>" sorgusu geçer
+
+      allow update: if activeUser() && isMember() && validCat(request.resource.data)
+        && request.resource.data.sahip == resource.data.sahip
+        && request.resource.data.olusturma == resource.data.olusturma
+        && (
+          isOwner()                                   // sahip: ad ve üyeleri değiştirir
+          || (                                         // üye: yalnızca kendini çıkarabilir
+            request.resource.data.ad == resource.data.ad
+            && request.resource.data.uyeler.size() == resource.data.uyeler.size() - 1
+            && !(me() in request.resource.data.uyeler)
+            && request.resource.data.uyeler.hasAll(resource.data.uyeler.removeAll([me()]))
+          )
+        );
+
+      allow delete: if activeUser() && isOwner();
+
+      match /tasks/{tid} {
+        function cat() { return get(/databases/$(database)/documents/categories/$(cid)).data; }
+        function member() { return activeUser() && me() in cat().uyeler; }
+        function validTask(d) {
+          return d.keys().hasOnly(['metin', 'bitti', 'son', 'tekrar', 'olusturan', 'atanan', 'olusturma',
+                                    'bitirmeZamani', 'bitiren', 'silindi', 'silenKisi', 'guncelleme'])
+            && d.metin is string && d.metin.size() > 0 && d.metin.size() <= 500
+            && d.bitti is bool && d.silindi is bool
+            && (d.son == null || (d.son is string && d.son.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')))
+            && (d.tekrar == null || (d.tekrar is string && d.tekrar.size() <= 40))
+            && (d.atanan == null || d.atanan in cat().uyeler)
+            && (d.bitiren == null || d.bitiren in cat().uyeler)
+            && (d.bitti == true || d.bitiren == null)
+            && d.guncelleme == request.time;
+        }
+
+        allow get, list: if member();
+
+        allow create: if member() && validTask(request.resource.data)
+          && request.resource.data.olusturan == me()
+          && request.resource.data.olusturma == request.time;
+
+        allow update: if member() && validTask(request.resource.data)
+          && request.resource.data.olusturan == resource.data.olusturan
+          && request.resource.data.olusturma == resource.data.olusturma;
+
+        // Fiziksel silme yalnızca kategori silinirken sahibin temizliği içindir; üyeler görevi yumuşak siler (silindi: true).
+        allow delete: if activeUser() && cat().sahip == me();
+      }
+    }
+  }
+}

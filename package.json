@@ -13,7 +13,8 @@
     "backup": "node scripts/backup.js",
     "predist": "node scripts/backup.js --label=dist",
     "notes": "node scripts/release-notes.js",
-    "postdist": "node scripts/release-notes.js"
+    "postdist": "node scripts/release-notes.js",
+    "test:rules": "node scripts/test-rules.js"
   },
   "build": {
     "appId": "local.masaustu.panel",
@@ -56,11 +57,13 @@
     "marked": "^18.0.14"
   },
   "devDependencies": {
+    "@bybas/weather-icons": "^2.0.0",
+    "@firebase/rules-unit-testing": "^6.0.0",
+    "@toast-ui/editor": "^3.2.2",
     "electron": "^44.5.1",
     "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2",
-    "@bybas/weather-icons": "^2.0.0",
-    "@toast-ui/editor": "^3.2.2"
+    "firebase": "^13.1.0"
   },
   "overrides": {
     "dompurify": "$dompurify"

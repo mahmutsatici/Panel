@@ -20,7 +20,8 @@ Aşağıdaki davranış ilkeleri [multica-ai/andrej-karpathy-skills](https://git
 - `npm run dist`: Windows NSIS kurulum paketi (`dist/v<sürüm>/` klasörüne).
 - `npm run backup`: veri klasörünü seçili yedekleme klasörüne (`Panel yedekleri/islem-oncesi/…`) kopyalar. `npm run dist` bunu kendiliğinden çalıştırır.
 - Her yeni sürümde `surum-notlari/v<sürüm>.txt` yazılır; `npm run dist` bunu `dist/v<sürüm>/Surum-Notlari.txt` olarak kopyalar (`npm run notes`: elle).
-- Otomatik test yok; "doğrulama" = build hatasız geçer + ilgili özellik uygulamada denenir.
+- `npm run test:rules`: Firestore güvenlik kurallarını (firebase/firestore.rules) Firebase emülatöründe test eder. Kurallar değişince zorunlu; Java için taşınabilir JDK `%LOCALAPPDATA%\panel-dev-tools` altında.
+- Otomatik test yok (kurallar hariç); "doğrulama" = build hatasız geçer + ilgili özellik uygulamada denenir.
 
 ## 1. Kodlamadan önce düşün
 

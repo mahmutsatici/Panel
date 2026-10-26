@@ -17,6 +17,17 @@ esbuild.buildSync({
   logLevel: 'warning',
 });
 
+// Bulut (Firebase) istemcisi: yalnızca kullanılan parçalar paketlenir (js/cloud.js bunu kullanır)
+esbuild.buildSync({
+  entryPoints: [path.join(__dirname, 'cloud-entry.js')],
+  bundle: true,
+  minify: true,
+  format: 'iife',
+  target: 'chrome120',
+  outfile: path.join(out, 'cloud.js'),
+  logLevel: 'warning',
+});
+
 const dist = path.join(root, 'node_modules', '@toast-ui', 'editor', 'dist');
 fs.copyFileSync(path.join(dist, 'toastui-editor.css'), path.join(out, 'editor.css'));
 fs.copyFileSync(path.join(dist, 'theme', 'toastui-editor-dark.css'), path.join(out, 'editor-dark.css'));
