@@ -1,0 +1,13 @@
+Panel 2.0.0 — Çok kullanıcılı Panel (ortak yapılacaklar)
+=======================================================
+
+• Hesap (isteğe bağlı): Ayarlar → Hesap'tan e-posta ve şifreyle giriş. Giriş yapmazsan Panel eskisi gibi tamamen yerel çalışır.
+  Hesapları yöneticin açar (kendi kendine kayıt yok).
+• Ortak kategoriler: Yapılacaklar başlığındaki "＋ Ortak" ile açılır, başkalarıyla birlikte çalışılır. Yalnızca ortak kategoriler bulutta durur;
+  kişisel kategoriler, notlar ve ayarlar yalnızca bu bilgisayarda kalır.
+• Üyeler: kategorinin başlığındaki 👥 düğmesinden e-posta ile üye eklenir/çıkarılır; üyeler kategoriden kendileri de ayrılabilir.
+• Görev atama: ortak görevdeki yuvarlak düğmeden bir üyeye atanır. "Bana atananlar" düğmesi yalnızca sana atanmış görevleri gösterir.
+  Başkası sana görev atayınca (uygulama açıkken) bildirim gelir.
+• Ortak kategoride sıra oluşturma tarihine göredir (yeni görev üstte). Ortak ile kişisel kategori arasında sürüklenen görev taşınmaz, kopyalanır.
+• Çevrimdışı da çalışır: bağlantı gelince değişiklikler gönderilir. Ortak kategorilerin yerel yedeği veri klasöründe ortak-kopya.json olarak tutulur.
+• Güvenlik: erişim izin listesiyle sınırlıdır; kurallar Firebase emülatöründe otomatik test edilir (npm run test:rules).
