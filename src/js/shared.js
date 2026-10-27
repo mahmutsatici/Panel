@@ -10,6 +10,8 @@ const sharedCats = () => todo.cats.filter(c => c.shared);
 const sharedKey = cat => cat.shared ? `c:${cat.cid}` : `l:${cat.name}`;
 const sigOf = t => JSON.stringify([t.text, !!t.done, t.due || null, t.rec || null, t.assignee || null]);
 const stampOfMs = ms => ms == null ? undefined : new Date(ms).toLocaleString('sv-SE').slice(0, 16).replace(' ', 'T');
+const isMine = t => !!sync && t.assignee === sync.email;
+const memberName = (cat, email) => cat.uyeAdlari[email] || email.split('@')[0];
 const isOwner = cat => !!sync && cat.sahip === sync.email;
 
 function taskFromDoc(d) {
@@ -72,6 +74,7 @@ function applyCategories(docs) {
       fresh.push(cat);
     }
     Object.assign(cat, { name: d.ad, sahip: d.sahip, uyeler: d.uyeler, uyeAdlari: d.uyeAdlari || {} });
+    if (membersCid === d.id) renderMembers(membersMsg);
     if (!sync.taskUnsubs.has(d.id)) {
       sync.taskUnsubs.set(d.id, watchCatTasks(d.id));
     }
@@ -106,11 +109,16 @@ function applyTasks(cid, docs) {
   const tasks = docs.map(d => {
     const fresh = taskFromDoc(d);
     const t = known.get(d.id);
+    // Başkası bana görev atadıysa (ilk yükleme dışında; kendi değişikliğim bellekte zaten işlenmiş olur) bildir
+    if (cat.loaded && !fresh.done && fresh.assignee === sync.email && (t ? t.assignee !== sync.email : fresh.createdBy !== sync.email)) {
+      notifyAssigned(cat, fresh);
+    }
     if (t) Object.assign(t, fresh);   // var olan nesne korunur (sürükleme/düzenleme referansları)
     const task = t || fresh;
     cat.base.set(task.id, sigOf(task));
     return task;
   });
+  cat.loaded = true;
   // Henüz buluta gönderilmemiş (id'siz) görevler kalır
   cat.tasks = sortShared([...cat.tasks.filter(t => !t.id), ...tasks]);
   renderWhenIdle();
@@ -197,3 +205,92 @@ cloud.onChange(user => {
   $('#addSharedCat').hidden = !(user && user.active);
   if (user && user.active) startSharedSync(user); else stopSharedSync();
 });
+
+// ============ Atama ============
+const assigneeButtonHtml = (cat, task) => {
+  if (!task.assignee) return '<button class="asg none" title="Birine ata">＋</button>';
+  const me = task.assignee === sync?.email;
+  const name = memberName(cat, task.assignee);
+  return `<button class="asg set${me ? ' me' : ''}" title="Atanan: ${esc(name)}">${esc(name.charAt(0).toLocaleUpperCase('tr'))}</button>`;
+};
+const assignPop = $('#assignPop');
+function closeAssignPop() { assignPop.hidden = true; }
+function pickAssignee(anchor, cat, task) {
+  const opts = [['', 'Atanmamış'], ...cat.uyeler.map(e => [e, e === sync.email ? `${memberName(cat, e)} (ben)` : memberName(cat, e)])];
+  assignPop.innerHTML = opts.map(([e, label]) => `<button type="button" data-e="${esc(e)}" class="${(task.assignee || '') === e ? 'on' : ''}">${esc(label)}</button>`).join('');
+  assignPop.querySelectorAll('button').forEach(b => b.onclick = () => {
+    closeAssignPop();
+    task.assignee = b.dataset.e || undefined;
+    saveTodos();
+  });
+  assignPop.hidden = false;
+  const r = anchor.getBoundingClientRect(), w = assignPop.offsetWidth, h = assignPop.offsetHeight;
+  assignPop.style.left = `${Math.min(Math.max(8, r.left), innerWidth - w - 8)}px`;
+  assignPop.style.top = `${Math.max(8, r.bottom + 6 + h > innerHeight - 8 ? r.top - h - 6 : r.bottom + 6)}px`;
+}
+document.addEventListener('mousedown', e => { if (!assignPop.hidden && !e.target.closest('#assignPop, .asg')) closeAssignPop(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAssignPop(); });
+
+// Başkasının bana atadığı yeni görev: sistem bildirimi (uygulama açıkken)
+function notifyAssigned(cat, task) {
+  try {
+    new Notification('Sana görev atandı', { body: `${cat.name}: ${task.text}` });
+  } catch (e) { console.error(e); }
+}
+
+// ============ Üyeler penceresi ============
+let membersCid = null, membersMsg = '';
+const membersDlg = $('#membersDlg');
+membersDlg.addEventListener('close', () => { membersCid = null; });
+function openMembers(cat) {
+  membersCid = cat.cid;
+  renderMembers('');
+  membersDlg.showModal();
+}
+function renderMembers(msg = '') {
+  membersMsg = msg;
+  if (!membersCid) return;
+  const cat = sharedCats().find(c => c.cid === membersCid);
+  if (!cat) { membersCid = null; if (membersDlg.open) membersDlg.close(); return; }
+  const owner = isOwner(cat);
+  $('#memTitle').textContent = `Üyeler · ${cat.name}`;
+  $('#memBody').innerHTML = `
+    <ul class="trash-list">${cat.uyeler.map(e => `
+      <li><span class="tl-main"><span class="tl-text">${esc(memberName(cat, e))}${e === cat.sahip ? ' <span class="muted">· sahip</span>' : ''}</span>
+        <span class="muted">${esc(e)}</span></span>
+        ${owner && e !== cat.sahip ? `<button type="button" data-rm="${esc(e)}">Çıkar</button>` : ''}</li>`).join('')}</ul>
+    ${owner ? `<div class="mem-add"><input id="memEmail" type="email" placeholder="E-posta" autocomplete="off"><input id="memName" placeholder="Görünecek ad (isteğe bağlı)" autocomplete="off"><button type="button" id="memAdd">Ekle</button></div>
+      <p class="muted">Kişinin hesabı yöneticiden açılmış ve izin listesinde olmalı; yoksa kategoriyi göremez.</p>`
+      : '<div class="row"><button type="button" id="memLeave">Kategoriden ayrıl</button></div>'}
+    <p class="mem-msg">${esc(msg)}</p>`;
+  const run = async fn => {
+    try { await fn(); } catch (e) { syncError(e); renderMembers(`Olmadı: ${e.code || e.message}`); }
+  };
+  $('#memBody').querySelectorAll('[data-rm]').forEach(b => b.onclick = () => {
+    const email = b.dataset.rm;
+    if (!confirm(`${memberName(cat, email)} bu kategoriden çıkarılsın mı?\n\nKişinin görevlerdeki ataması kalkar.`)) return;
+    run(() => removeMember(cat, email));
+  });
+  const leave = $('#memLeave');
+  if (leave) leave.onclick = () => {
+    if (!confirm(`"${cat.name}" kategorisinden ayrılmak istiyor musun?\n\nSana atanan görevlerin ataması kalkar; tekrar katılmak için sahibinin seni eklemesi gerekir.`)) return;
+    run(async () => { await removeMember(cat, sync.email); membersDlg.close(); });
+  };
+  if (owner) {
+    const add = () => run(async () => {
+      const email = $('#memEmail').value.trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return renderMembers('E-posta geçersiz.');
+      if (cat.uyeler.includes(email)) return renderMembers('Bu kişi zaten üye.');
+      if (cat.uyeler.length >= 20) return renderMembers('En fazla 20 üye olabilir.');
+      await cloud.setMembers(cat.cid, [...cat.uyeler, email], { ...cat.uyeAdlari, [email]: $('#memName').value.trim() });
+      renderMembers('Eklendi.');
+    });
+    $('#memAdd').onclick = add;
+    $('#memBody').querySelectorAll('input').forEach(i => i.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } }));
+  }
+}
+async function removeMember(cat, email) {
+  const uyeAdlari = { ...cat.uyeAdlari };
+  delete uyeAdlari[email];
+  await cloud.removeMember(cat.cid, email, cat.uyeler.filter(e => e !== email), uyeAdlari);
+}

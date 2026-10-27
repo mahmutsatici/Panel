@@ -103,6 +103,7 @@
       <div class="card-head">
         <h2>Yapılacaklar <span class="badge" id="todoCount"></span><span class="sync-note" id="syncNote" hidden>⚠</span></h2>
         <div class="actions">
+          <button class="text-btn" id="filterMine" title="Yalnızca bana atanan görevleri göster" hidden>Bana atananlar</button>
           <button class="text-btn" id="toggleDone"></button>
           <button class="text-btn" id="addCat" title="Yeni kategori">＋ Kategori</button>
           <button class="text-btn" id="addSharedCat" title="Başkalarıyla ortak çalışacağın yeni kategori" hidden>＋ Ortak</button>
@@ -137,6 +138,7 @@
 
   <!-- Görev son tarihi ve tekrarı için açılır pencere (js/core.js → pickDate) -->
   <div class="date-pop" id="datePop" hidden></div>
+  <div class="assign-pop" id="assignPop" hidden></div>
 
   <!-- Spark küçük penceresi: Spark kartı görünmüyorken Ctrl+Alt+V ile açılır -->
   <div class="assistant-pop" id="assistantPop" hidden>
@@ -329,6 +331,17 @@
           </section>
         </div>
       </div>
+      <div class="row end">
+        <button value="close" class="primary">Kapat</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Ortak kategori üyeleri -->
+  <dialog id="membersDlg">
+    <form method="dialog" class="settings members">
+      <h2 id="memTitle">Üyeler</h2>
+      <div id="memBody"></div>
       <div class="row end">
         <button value="close" class="primary">Kapat</button>
       </div>

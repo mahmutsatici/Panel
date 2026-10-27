@@ -23,6 +23,7 @@ const newCat = name => ({ name, tasks: [], hidden: [] });
 const activeCats = () => todo.cats.filter(c => !c.deleted);
 let todo = { head: '# Yapılacaklar', cats: [] };
 let showDone = store.get('showDone', true);
+let mineOnly = store.get('mineOnly', false);   // yalnızca bana atanan ortak görevler
 let collapsed = new Set(store.get('collapsedCats', []));
 let selectedCat = store.get('lastCatName', null);
 // Açık bekleyen "yeni görev" satırı (henüz dosyada değil): { cat, after, due, rec, text, manual }
@@ -228,6 +229,8 @@ function renderTodos() {
   let open = 0;
 
   for (const cat of activeCats()) {
+    // "Bana atananlar" süzgeci: yalnızca bana atanmış görevi olan ortak kategoriler
+    if (mineOnly && !cat.tasks.some(t => isMine(t) && (showDone || !t.done))) continue;
     const openCount = openCountOf(cat);
     const doneCount = cat.tasks.length - openCount;
     open += openCount;
@@ -239,7 +242,7 @@ function renderTodos() {
       <div class="cat-head" draggable="true" title="Sürükleyerek sırala">
         <span class="chev">▼</span>
         <span class="dot" title="${loadTitle(cat)}"></span>
-        <span class="name">${esc(cat.name)}</span>${cat.shared ? `<span class="shared-mark" title="${esc(sharedTitle(cat))}">👥</span>` : ''}
+        <span class="name">${esc(cat.name)}</span>${cat.shared ? `<button class="shared-mark" title="${esc(sharedTitle(cat))}">👥 ${cat.uyeler.length}</button>` : ''}
         <span class="cnt" title="Yapılmamış / toplam">${openCount}${cat.tasks.length ? ' / ' + cat.tasks.length : ''}</span>
         <span class="tools">
           <button class="add" title="Bu kategoriye görev ekle">＋</button>
@@ -256,6 +259,8 @@ function renderTodos() {
       sec.classList.toggle('collapsed');
     };
     head.querySelector('.add').onclick = () => startNewTask(cat);
+    const memBtn = head.querySelector('.shared-mark');
+    if (memBtn) memBtn.onclick = () => openMembers(cat);
     const renBtn = head.querySelector('.ren'), delBtn = head.querySelector('.del');
     if (renBtn) {
       renBtn.onclick = () => renameCategory(cat, head);
@@ -312,7 +317,7 @@ Bu işlem geri alınamaz.`)) return;
     });
 
     const ul = sec.querySelector('ul');
-    const tasks = cat.tasks.filter(t => showDone || !t.done);
+    const tasks = cat.tasks.filter(t => (showDone || !t.done) && (!mineOnly || isMine(t)));
     // Kategorideki "+" ile açılan boş görev satırı en üstte durur
     const newHere = pendingNew && pendingNew.cat === cat;
     if (newHere && !pendingNew.after) ul.append(buildNewTaskRow());
@@ -322,10 +327,13 @@ Bu işlem geri alınamaz.`)) return;
       li.draggable = true;
       li.innerHTML = `<input type="checkbox" ${task.done ? 'checked' : ''}>`
         + `<span class="txt" title="${esc(taskTitle(task))}">${renderInline(task.text)}</span>`
+        + (cat.shared ? assigneeButtonHtml(cat, task) : '')
         + dueButtonHtml(task)
         + (cat.shared ? '' : '<button class="row-add" title="Altına görev ekle">＋</button>')
         + '<button class="del" title="Sil">✕</button>';
       li.querySelector('input').onchange = e => setDone(cat, task, e.target.checked);
+      const asg = li.querySelector('.asg');
+      if (asg) asg.onclick = e => pickAssignee(e.currentTarget, cat, task);
       const rowAdd = li.querySelector('.row-add');
       if (rowAdd) rowAdd.onclick = () => startNewTask(cat, task);
       li.querySelector('.del').onclick = () => { deleteTask(cat, task); saveTodos(); };
@@ -377,6 +385,9 @@ Bu işlem geri alınamaz.`)) return;
   }
 
   $('#todoCount').textContent = open ? String(open) : '';
+  $('#filterMine').hidden = !sharedCats().length;
+  $('#filterMine').classList.toggle('on', mineOnly);
+  if (mineOnly && !root.children.length) root.innerHTML = '<p class="muted" style="padding:8px 4px">Sana atanmış görev yok.</p>';
   $('#toggleDone').textContent = showDone ? 'Tamamlananları gizle' : 'Tamamlananları göster';
   // Bekleyen satır artık çizilemiyorsa (görev/kategori silindi ya da gizlendi) vazgeç
   const newRow = $('#todoList .new-task');
@@ -568,4 +579,5 @@ function addCategory(shared) {
   input.onblur = () => finish(true);
 }
 
+$('#filterMine').onclick = () => { mineOnly = !mineOnly; store.set('mineOnly', mineOnly); renderTodos(); };
 $('#toggleDone').onclick = () => { showDone = !showDone; store.set('showDone', showDone); renderTodos(); };

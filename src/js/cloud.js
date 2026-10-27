@@ -121,6 +121,22 @@ cloud.updateTask = (cid, id, patch) =>
 cloud.createCategory = (id, ad) => fsd().setDoc(fsd().doc(cloud.db, 'categories', id), {
   ad, sahip: cloud.user.email, uyeler: [cloud.user.email], uyeAdlari: { [cloud.user.email]: cloud.user.ad || '' }, olusturma: cloud.now(),
 });
+cloud.setMembers = (cid, uyeler, uyeAdlari) => fsd().updateDoc(fsd().doc(cloud.db, 'categories', cid), { uyeler, uyeAdlari });
+
+// Üyeyi çıkarır (sahip biri için ya da kişi kendi isteğiyle ayrılırken). Kurallar üye olmayan birini görevde kabul etmez;
+// bu yüzden önce o kişinin atamaları ve "bitiren" izi görevlerden temizlenir (kişi hâlâ üyeyken), sonra listeden çıkarılır.
+cloud.removeMember = async (cid, email, uyeler, uyeAdlari) => {
+  const col = fsd().collection(cloud.db, 'categories', cid, 'tasks');
+  for (const field of ['atanan', 'bitiren']) {
+    const snap = await fsd().getDocs(fsd().query(col, fsd().where(field, '==', email)));
+    for (let i = 0; i < snap.docs.length; i += 400) {
+      const batch = fsd().writeBatch(cloud.db);
+      snap.docs.slice(i, i + 400).forEach(d => batch.update(d.ref, { [field]: null, guncelleme: cloud.now() }));
+      await batch.commit();
+    }
+  }
+  await cloud.setMembers(cid, uyeler, uyeAdlari);
+};
 cloud.renameCategory = (cid, ad) => fsd().updateDoc(fsd().doc(cloud.db, 'categories', cid), { ad });
 
 // Kategoriyi siler: önce görevleri (kurallar görev silmeyi kategori belgesi varken izin verir), sonra kategoriyi

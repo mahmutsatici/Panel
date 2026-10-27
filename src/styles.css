@@ -908,3 +908,19 @@ body.solo .stats .st-side .st-kv:nth-child(2) { display: none; }   /* açık/gec
 /* Ortak kategoriler */
 .cat-head .shared-mark { font-size: var(--fs-meta); opacity: .75; cursor: help; }
 .sync-note { color: var(--load-3); font-size: var(--fs-sub); margin-left: 6px; cursor: help; }
+.cat-head .shared-mark { border: 0; background: var(--card-2); color: var(--muted); border-radius: 99px; padding: 0 7px; cursor: pointer; opacity: 1; font-size: var(--fs-meta); }
+.cat-head .shared-mark:hover { color: var(--text); background: var(--card-3); }
+.cat li .asg { border: 0; background: none; color: var(--muted); border-radius: 99px; width: 22px; height: 22px; padding: 0; font-size: var(--fs-meta); font-weight: 650; flex: none; }
+.cat li .asg.none { opacity: 0; }
+.cat li:hover .asg.none { opacity: .8; }
+.cat li .asg.set { background: var(--accent-soft); color: var(--accent); }
+.cat li .asg.me { background: var(--accent); color: var(--card); }
+.text-btn.on { color: var(--accent); background: var(--accent-soft); }
+.assign-pop { position: fixed; z-index: 40; min-width: 190px; padding: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 18px 44px rgba(0,0,0,.42); display: flex; flex-direction: column; gap: 2px; }
+.assign-pop[hidden] { display: none; }
+.assign-pop button { border: 0; background: none; color: var(--text); text-align: left; padding: 6px 10px; border-radius: 8px; font-size: var(--fs-sub); }
+.assign-pop button:hover, .assign-pop button.on { background: var(--card-2); }
+.assign-pop button.on { color: var(--accent); font-weight: 600; }
+.members .mem-add { display: flex; gap: 6px; }
+.members .mem-add input { flex: 1; min-width: 0; }
+.members .mem-msg { color: var(--load-3); min-height: 1em; }
