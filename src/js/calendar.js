@@ -18,6 +18,7 @@ function closeCalDay() {
   if (!calDayOpen) return;
   calDayOpen = false;
   $('#calDay').hidden = true;
+  document.querySelectorAll('.cal-d.sel').forEach(c => c.classList.remove('sel'));   // pencere kapanınca seçim işareti de kalkar
 }
 // Pencere dışına tıklayınca / Esc ile kapansın
 document.addEventListener('mousedown', e => {
@@ -77,7 +78,7 @@ function renderCalendar() {
     if (d.getMonth() !== calMonth.getMonth()) cls.push('other');
     if (i % 7 > 4) cls.push('we');
     if (iso === today) cls.push('today');
-    if (iso === calSelected) cls.push('sel');
+    if (calDayOpen && iso === calSelected) cls.push('sel');
     // Nokta rengi: geçmiş + açık görev → kırmızı, bugün → turuncu, ileri → vurgu, hepsi bitmiş → yeşil
     let dot = '';
     if (items.length) {

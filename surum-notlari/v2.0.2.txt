@@ -1,0 +1,5 @@
+Panel 2.0.2 — takvim seçimi
+===========================
+
+• Takvimde tıkladığın günün seçili işareti artık gün penceresi kapanınca (dışarı tıklama, Esc ya da aynı güne tekrar tıklama) kalkıyor.
+  Önceden en son tıklanan gün sürekli seçili kalıyordu.

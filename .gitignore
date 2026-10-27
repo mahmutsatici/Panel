@@ -9,3 +9,5 @@ Panel.lnk
 Users*/
 # Firebase emülatörü günlükleri
 *-debug.log
+# Test penceresinin profili (oturum bilgisi içerir)
+panel-test2/
