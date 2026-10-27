@@ -112,6 +112,12 @@ cloud.watchTasks = (cid, cb, onError) => {
   return () => unsubs.forEach(u => u());
 };
 
+// Silinenler penceresi için: kategorinin yumuşak silinmiş görevleri (yalnızca istendiğinde okunur)
+cloud.listDeletedTasks = async cid => {
+  const snap = await fsd().getDocs(fsd().query(fsd().collection(cloud.db, 'categories', cid, 'tasks'), fsd().where('silindi', '==', true)));
+  return snap.docs.map(d => { const x = d.data(); return { id: d.id, metin: x.metin, silenKisi: x.silenKisi, guncelleme: tsMs(x.guncelleme) }; });
+};
+
 const taskRef = (cid, id) => fsd().doc(cloud.db, 'categories', cid, 'tasks', id);
 cloud.createTask = (cid, id, data) =>
   fsd().setDoc(taskRef(cid, id), { ...data, olusturma: cloud.now(), guncelleme: cloud.now() });

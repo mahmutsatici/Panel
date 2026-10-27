@@ -23,11 +23,12 @@ function computeStats() {
 
   for (const { task } of allTasks()) {
     if (!task.done) {
+      if (!onMyPlate(task)) continue;
       open++;
       if (task.due && task.due < today) overdue++;
       continue;
     }
-    if (!task.completed) continue;
+    if (!task.completed || !ownDone(task)) continue;
     const day = task.completed.slice(0, 10);
     if (day >= weekStart) {
       const i = dayDiffBetween(weekStart, day);
@@ -48,7 +49,7 @@ function computeMoreStats() {
   const today = todayISO();
   const doneByDay = new Map();
   for (const { task } of allTasks()) {
-    if (!task.done || !task.completed) continue;
+    if (!task.done || !task.completed || !ownDone(task)) continue;
     const d = task.completed.slice(0, 10);
     doneByDay.set(d, (doneByDay.get(d) || 0) + 1);
   }
@@ -70,7 +71,7 @@ function computeMoreStats() {
     for (let k = 0; k < 7; k++) n += doneByDay.get(addDays(ws, k)) || 0;
     return { ws, n };
   });
-  const openAll = allTasks().filter(x => !x.task.done);
+  const openAll = allTasks().filter(x => !x.task.done && onMyPlate(x.task));
   const upcoming = Array.from({ length: 7 }, (_, i) => {
     const iso = addDays(today, i);
     return { iso, n: openAll.filter(x => x.task.due === iso).length };

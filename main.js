@@ -51,6 +51,8 @@ const DEFAULT_SETTINGS = {
   ttsEnabled: true, ttsVoice: 'Kore',
   // Konuşma bitince (bu kadar ms sessizlikten sonra) kayıt kendiliğinden gönderilir; 0 = kapalı, düğmeyle bitirilir
   sparkSilenceMs: 1500,
+  // Ortak kategorilerdeki görevler Spark'a (Gemini'ye) gönderilsin mi
+  sparkSeesShared: true,
   // SPARK'ın öncelik vereceği YouTube Music listeleri: [{ name: 'Chill', id: 'PL…' }]
   musicLists: [], ttsModels: 'gemini-2.5-flash-preview-tts',
 };

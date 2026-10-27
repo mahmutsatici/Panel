@@ -10,6 +10,9 @@ const sharedCats = () => todo.cats.filter(c => c.shared);
 const sharedKey = cat => cat.shared ? `c:${cat.cid}` : `l:${cat.name}`;
 const sigOf = t => JSON.stringify([t.text, !!t.done, t.due || null, t.rec || null, t.assignee || null]);
 const stampOfMs = ms => ms == null ? undefined : new Date(ms).toLocaleString('sv-SE').slice(0, 16).replace(' ', 'T');
+// Kişisel istatistikler: başkasının tamamladığı ortak görev sayılmaz; başkasına atanmış açık görev de benim yükümde değildir
+const ownDone = t => !t.completedBy || !sync || t.completedBy === sync.email;
+const onMyPlate = t => !t.assignee || !sync || t.assignee === sync.email;
 const isMine = t => !!sync && t.assignee === sync.email;
 const memberName = (cat, email) => cat.uyeAdlari[email] || email.split('@')[0];
 const isOwner = cat => !!sync && cat.sahip === sync.email;
@@ -294,3 +297,18 @@ async function removeMember(cat, email) {
   delete uyeAdlari[email];
   await cloud.removeMember(cat.cid, email, cat.uyeler.filter(e => e !== email), uyeAdlari);
 }
+
+// Silinenler penceresi için: tüm ortak kategorilerdeki silinmiş görevler (en yeni üstte)
+async function deletedSharedTasks() {
+  if (!sync) return [];
+  const rows = [];
+  for (const cat of sharedCats()) {
+    try {
+      for (const d of await cloud.listDeletedTasks(cat.cid)) {
+        rows.push({ cat, id: d.id, text: d.metin, at: d.guncelleme, by: d.silenKisi ? memberName(cat, d.silenKisi) : '' });
+      }
+    } catch (e) { syncError(e); }
+  }
+  return rows.sort((a, b) => (b.at || 0) - (a.at || 0));
+}
+const restoreSharedTask = r => cloud.updateTask(r.cat.cid, r.id, { silindi: false, silenKisi: null }).catch(syncError);

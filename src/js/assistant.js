@@ -237,11 +237,13 @@ function tasksContext(typedText) {
   ctxTasks = new Map();
   let n = 0;
   for (const cat of activeCats()) {
+    if (cat.shared && settings.sparkSeesShared === false) continue;   // ortak kategoriler Spark'a kapatılabilir
     lines.push(`## ${cat.name}`);
+    if (cat.shared) lines.push(`(ortak kategori; üyeler: ${cat.uyeler.map(e => memberName(cat, e)).join(', ')})`);
     for (const t of cat.tasks) {
       const id = `t${++n}`;
       ctxTasks.set(id, { cat, task: t });
-      lines.push(`[${id}] ${taskLine(t)}`);
+      lines.push(`[${id}] ${taskLine(t)}${t.assignee ? ` (atanan: ${memberName(cat, t.assignee)})` : ''}`);
     }
   }
   // Aynı sohbetten devam: son birkaç konuşma Gemini'ye de gider

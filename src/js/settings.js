@@ -37,6 +37,7 @@ function fillSettingsDialog() {
   $('#geminiStatus').textContent = settings.geminiApiKey ? '' : 'Henüz anahtar girilmedi; sesli asistan çalışmaz.';
   $('#voiceShortcutLbl').textContent = settings.voiceShortcut.replace('Control', 'Ctrl');
   $('#ttsEnabled').checked = settings.ttsEnabled !== false;
+  $('#sparkShared').checked = settings.sparkSeesShared !== false;
   $('#ttsVoice').value = settings.ttsVoice || 'Kore';
   renderTtsModels();
   renderFallbackModels();
@@ -184,6 +185,7 @@ async function refreshYtmStatus() {
     ? '✓ YouTube Music uygulaması bulundu; müzik orada açılır.'
     : 'YouTube Music uygulaması (Chrome ile kurulmuş) bulunamadı; müzik tarayıcıda yeni sekmede açılır.';
 }
+$('#sparkShared').onchange = async e => { settings = await api.settings.set({ sparkSeesShared: e.target.checked }); };
 $('#ttsEnabled').onchange = async e => { settings = await api.settings.set({ ttsEnabled: e.target.checked }); };
 $('#ttsVoice').onchange = async e => { settings = await api.settings.set({ ttsVoice: e.target.value }); };
 $('#ttsPreview').onclick = async () => {

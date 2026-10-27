@@ -15,6 +15,9 @@ async function renderTrash() {
       if (t) taskRows.push({ cat, i, t, at: deletedAtOf(line) });
     });
   }
+  for (const r of await deletedSharedTasks()) {
+    taskRows.push({ cat: r.cat, id: r.id, t: { text: r.text }, at: `${fmtStamp.format(new Date(r.at || Date.now()))}${r.by ? ' · ' + r.by : ''}` });
+  }
   const catRows = todo.cats.filter(c => c.deleted);
 
   const section = (title, rows) => `<h3>${title} <span class="muted">(${rows.length})</span></h3>`
@@ -22,7 +25,7 @@ async function renderTrash() {
   body.innerHTML =
     section('Görevler', taskRows.map((r, k) => `
       <li><span class="tl-main"><span class="tl-text">${renderInline(r.t.text)}</span>
-        <span class="muted">${esc(r.cat.name)} · ${esc(r.at)}</span></span>
+        <span class="muted">${esc(r.cat.name)}${r.id ? ' (ortak)' : ''} · ${esc(r.at)}</span></span>
         <button type="button" data-task="${k}">Geri getir</button></li>`)) +
     section('Kategoriler', catRows.map((c, k) => `
       <li><span class="tl-main"><span class="tl-text">${esc(c.name)}</span>
@@ -35,8 +38,7 @@ async function renderTrash() {
 
   body.querySelectorAll('[data-task]').forEach(b => b.onclick = async () => {
     const r = taskRows[+b.dataset.task];
-    restoreHiddenTask(r.cat, r.i);
-    await saveTodos();
+    if (r.id) restoreSharedTask(r); else { restoreHiddenTask(r.cat, r.i); await saveTodos(); }
     renderTrash();
   });
   body.querySelectorAll('[data-cat]').forEach(b => b.onclick = async () => {

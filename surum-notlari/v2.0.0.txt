@@ -11,3 +11,6 @@ Panel 2.0.0 — Çok kullanıcılı Panel (ortak yapılacaklar)
 • Ortak kategoride sıra oluşturma tarihine göredir (yeni görev üstte). Ortak ile kişisel kategori arasında sürüklenen görev taşınmaz, kopyalanır.
 • Çevrimdışı da çalışır: bağlantı gelince değişiklikler gönderilir. Ortak kategorilerin yerel yedeği veri klasöründe ortak-kopya.json olarak tutulur.
 • Güvenlik: erişim izin listesiyle sınırlıdır; kurallar Firebase emülatöründe otomatik test edilir (npm run test:rules).
+• Silinenler: ortak kategorilerde silinen görevler de Silinenler penceresinde görünür ve geri getirilebilir (herhangi bir üye geri getirebilir).
+• Özet kartı: yalnızca senin tamamladığın görevler sayılır; başkasına atanmış açık görevler senin yükünde sayılmaz.
+• Spark ortak görevleri (ve kime atandıklarını) görür; Ayarlar → Spark → "Ortak görevler" ile kapatılabilir.
