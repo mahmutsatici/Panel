@@ -160,6 +160,7 @@
           <button type="button" data-page="general">Genel</button>
           <button type="button" data-page="look">Görünüm</button>
           <button type="button" data-page="account">Hesap</button>
+          <button type="button" data-page="admin" id="setNavAdmin" hidden>Yönetici</button>
           <button type="button" data-page="spark">Spark</button>
           <button type="button" data-page="notify">Bildirim &amp; yedek</button>
           <button type="button" data-page="system">Sistem</button>
@@ -218,9 +219,21 @@
             </div>
             <div id="acctSignedIn" hidden>
               <p>Giriş yapıldı: <b id="acctUser"></b></p>
-              <div class="row"><button type="button" id="acctSignOut">Çıkış yap</button></div>
+              <div class="row"><button type="button" id="acctRefresh" hidden>Durumu yenile</button><button type="button" id="acctSignOut">Çıkış yap</button></div>
             </div>
             <p class="muted">Giriş <b>isteğe bağlıdır</b>: girmezsen Panel bugünkü gibi tamamen bu bilgisayarda çalışır. Giriş yalnızca ortak (paylaşılan) kategoriler içindir. Hesaplar yöneticin tarafından açılır; kayıt yoktur.</p>
+          </section>
+
+          <section class="set-page" data-page="admin">
+            <h3>Bekleyen istekler</h3>
+            <p class="muted" id="admStatus"></p>
+            <div id="admRequests"></div>
+            <h3>İzin listesi</h3>
+            <div id="admAllowed"></div>
+            <h3>Bugünkü tahmini kullanım</h3>
+            <div id="admUsage"></div>
+            <div class="row"><button type="button" id="admRefresh">Yenile</button></div>
+            <p class="muted">Yeni kişi: Firebase konsolunda Authentication → Users'tan hesabı aç, e-posta ve şifreyi kişiye ver. Kişi Panel'e girince burada "Bekleyen istekler"de görünür; adını yazıp Onayla'ya bas. Kullanım rakamları istemcilerin bildirdiği <b>tahmindir</b>; kesin değer Firebase konsolundaki Usage sayfasındadır.</p>
           </section>
 
           <section class="set-page" data-page="spark">
@@ -379,6 +392,7 @@
   <script src="js/notes.js"></script>
   <script src="js/trash.js"></script>
   <script src="js/layout.js"></script>
+  <script src="js/admin.js"></script>
   <script src="js/settings.js"></script>
   <script src="app.js"></script>
 </body>

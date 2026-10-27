@@ -63,8 +63,12 @@ function renderAccount() {
   // Giriş yapılmış ama izin listesinde değilse (ya da liste okunamadıysa) ortak kategoriler kapalı kalır
   if (cloud.user && !cloud.user.active) {
     st.classList.add('err');
-    st.textContent = cloud.user.error ? `Hesap bilgisi okunamadı (${cloud.user.error}).` : 'Bu hesap henüz ortak çalışmaya açılmamış; yöneticine söyle. Panel yerel olarak çalışmaya devam eder.';
+    st.textContent = cloud.user.error ? `Hesap bilgisi okunamadı (${cloud.user.error}).`
+      : cloud.user.requested ? 'Hesabın yönetici onayını bekliyor; isteğin iletildi. Onaylandıktan sonra "Durumu yenile"ye bas. Panel yerel olarak çalışmaya devam eder.'
+      : 'Bu hesap henüz ortak çalışmaya açılmamış; yöneticine söyle. Panel yerel olarak çalışmaya devam eder.';
   } else st.classList.remove('err');
+  $('#acctRefresh').hidden = !(cloud.user && !cloud.user.active);
+  $('#setNavAdmin').hidden = !cloud.user?.admin;
 }
 cloud.onChange(renderAccount);
 async function acctSignIn() {
@@ -87,12 +91,14 @@ $('#acctReset').onclick = async () => {
   st.textContent = err || 'Şifre sıfırlama e-postası gönderildi (gelen kutunu ve istenmeyenleri kontrol et).';
 };
 $('#acctSignOut').onclick = () => cloud.signOut();
+$('#acctRefresh').onclick = () => cloud.loadProfile();
 
 // --- Kategoriler: soldaki menü sağdaki sayfayı seçer; son açılan sayfa hatırlanır ---
 function showSettingsPage(page) {
   $$('#setNav button').forEach(b => b.classList.toggle('active', b.dataset.page === page));
   $$('.set-page').forEach(p => { p.hidden = p.dataset.page !== page; });
   store.set('settingsPage', page);
+  if (page === 'admin') renderAdmin();
 }
 $$('#setNav button').forEach(b => b.onclick = () => showSettingsPage(b.dataset.page));
 

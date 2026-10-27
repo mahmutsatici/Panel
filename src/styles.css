@@ -924,3 +924,5 @@ body.solo .stats .st-side .st-kv:nth-child(2) { display: none; }   /* açık/gec
 .members .mem-add { display: flex; gap: 6px; }
 .members .mem-add input { flex: 1; min-width: 0; }
 .members .mem-msg { color: var(--load-3); min-height: 1em; }
+.settings .adm-name { flex: 1; min-width: 0; }
+.adm-use { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; font-size: var(--fs-sub); }

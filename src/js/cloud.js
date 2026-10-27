@@ -40,18 +40,37 @@ function cloudInit() {
     cloud.user = u ? { uid: u.uid, email: String(u.email || '').toLowerCase(), active: false, ad: '' } : null;
     cloud.ready = true;
     cloudChanged();
-    if (!u) return;
-    // İzin listesindeki kaydım: aktifse ortak kategoriler açılır
-    try {
-      const snap = await sdk.getDoc(sdk.doc(cloud.db, 'allowed', u.uid));
-      if (cloud.user?.uid !== u.uid) return;
-      const d = snap.exists() ? snap.data() : null;
-      cloud.user.active = !!(d && d.aktif === true);
-      cloud.user.ad = d?.ad || '';
-    } catch (e) { cloud.user.error = e.code || e.message; }
-    cloudChanged();
+    if (u) cloud.loadProfile();
   });
+  // Kullanım sayacı yöneticiye yarım saatte bir (değiştiyse) bildirilir
+  setInterval(() => cloud.reportUsage().catch(() => {}), 30 * 60 * 1000);
 }
+
+// İzin listesindeki kaydım: aktifse ortak kategoriler açılır. Aktif değilse (ilk giriş) yöneticiye "beni ekle" isteği bırakılır.
+cloud.loadProfile = async () => {
+  const u = cloud.user, sdk = window.CloudSDK;
+  if (!u) return;
+  try {
+    const snap = await sdk.getDoc(sdk.doc(cloud.db, 'allowed', u.uid));
+    cloud.count(1, 0);
+    if (cloud.user?.uid !== u.uid) return;
+    const d = snap.exists() ? snap.data() : null;
+    u.active = !!(d && d.aktif === true);
+    u.ad = d?.ad || '';
+    u.error = null;
+    if (u.active) {
+      u.admin = (await sdk.getDoc(sdk.doc(cloud.db, 'admins', u.uid))).exists();
+      setTimeout(() => cloud.reportUsage().catch(() => {}), 60 * 1000);
+    } else {
+      try {
+        const ref = sdk.doc(cloud.db, 'istekler', u.uid);
+        if (!(await sdk.getDoc(ref)).exists()) await sdk.setDoc(ref, { eposta: u.email, zaman: sdk.serverTimestamp() });
+        u.requested = true;
+      } catch { u.requested = false; }
+    }
+  } catch (e) { u.error = e.code || e.message; }
+  cloudChanged();
+};
 
 // Oturum durumu değişince dinleyenleri (hesap sayfası, ileride ortak kategoriler) haberdar et
 function cloudChanged() { cloud.listeners.forEach(fn => { try { fn(cloud.user); } catch (e) { console.error(e); } }); }
@@ -72,6 +91,40 @@ cloud.resetPassword = async email => {
 // Veri modeli ve güvenlik kuralları: firebase/firestore.rules
 const fsd = () => window.CloudSDK;
 const tsMs = v => (v && typeof v.toMillis === 'function') ? v.toMillis() : null;
+// Hata kodlarını anlaşılır Türkçeye çevirir (yoksa kodun kendisi gösterilir)
+const CLOUD_ERRORS = {
+  'permission-denied': 'bu işlem için yetkin yok (kategoriden çıkarılmış ya da hesabın pasife alınmış olabilir)',
+  'unavailable': 'sunucuya ulaşılamıyor; değişiklikler bağlantı gelince gönderilecek',
+  'resource-exhausted': 'günlük ücretsiz kota doldu; yarın düzelir',
+  'unauthenticated': 'oturum süresi dolmuş; yeniden giriş yap',
+};
+const cloudErrorText = e => CLOUD_ERRORS[e?.code] || e?.code || e?.message || String(e);
+
+// Kullanım sayacı (TAHMİN): sunucudan gelen belge ve yazma sayısı, günlük olarak cihazda tutulur ve yöneticiye bildirilir.
+// Kurallardaki get/exists çağrıları da okuma sayıldığı için her yazma ≈ +2 okuma eklenir. Kesin rakam Firebase konsolundadır.
+const usageToday = () => {
+  const u = store.get('usage', null);
+  return u && u.gun === todayISO() ? u : { gun: todayISO(), okuma: 0, yazma: 0, sent: 0 };
+};
+cloud.count = (reads, writes) => {
+  const u = usageToday();
+  u.okuma += reads + 2 * writes;
+  u.yazma += writes;
+  store.set('usage', u);
+};
+cloud.reportUsage = async () => {
+  const user = cloud.user;
+  if (!user?.active) return;
+  const before = usageToday();
+  if (before.sent === before.okuma + before.yazma) return;
+  cloud.count(0, 1);
+  const u = usageToday();
+  u.sent = u.okuma + u.yazma;
+  store.set('usage', u);
+  await fsd().setDoc(fsd().doc(cloud.db, 'kullanim', user.uid), { eposta: user.email, gun: u.gun, okuma: u.okuma, yazma: u.yazma, guncelleme: cloud.now() });
+};
+const countSnap = snap => { if (!snap.metadata.fromCache) cloud.count(snap.docChanges().length, 0); };
+
 const TASK_DAYS_DONE = 14;   // yapılmış görevlerden yalnızca son 14 günde tamamlananlar dinlenir (okuma kotası)
 
 cloud.newId = () => fsd().doc(fsd().collection(cloud.db, 'categories')).id;
@@ -80,7 +133,7 @@ cloud.now = () => fsd().serverTimestamp();
 // Üyesi olduğum kategoriler; cb([{ id, ad, sahip, uyeler, uyeAdlari }]) her değişimde çağrılır
 cloud.watchCategories = (email, cb, onError) => {
   const q = fsd().query(fsd().collection(cloud.db, 'categories'), fsd().where('uyeler', 'array-contains', email));
-  return fsd().onSnapshot(q, snap => cb(snap.docs.map(d => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }) }))), onError);
+  return fsd().onSnapshot(q, snap => countSnap(snap) || cb(snap.docs.map(d => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }) }))), onError);
 };
 
 // Bir kategorinin görevleri: açık olanlar + son günlerde bitenler; cb([görev]) her iki sorgu da yanıtlayınca çağrılır.
@@ -103,6 +156,7 @@ cloud.watchTasks = (cid, cb, onError) => {
     cb([...byId.values()].filter(t => !t.silindi));
   };
   const unsubs = queries.map((q, i) => fsd().onSnapshot(q, snap => {
+    countSnap(snap);
     res[i] = snap.docs.map(d => {
       const x = d.data({ serverTimestamps: 'estimate' });
       return { ...x, id: d.id, olusturma: tsMs(x.olusturma), bitirmeZamani: tsMs(x.bitirmeZamani), guncelleme: tsMs(x.guncelleme) };
@@ -115,19 +169,20 @@ cloud.watchTasks = (cid, cb, onError) => {
 // Silinenler penceresi için: kategorinin yumuşak silinmiş görevleri (yalnızca istendiğinde okunur)
 cloud.listDeletedTasks = async cid => {
   const snap = await fsd().getDocs(fsd().query(fsd().collection(cloud.db, 'categories', cid, 'tasks'), fsd().where('silindi', '==', true)));
+  cloud.count(snap.docs.length, 0);
   return snap.docs.map(d => { const x = d.data(); return { id: d.id, metin: x.metin, silenKisi: x.silenKisi, guncelleme: tsMs(x.guncelleme) }; });
 };
 
 const taskRef = (cid, id) => fsd().doc(cloud.db, 'categories', cid, 'tasks', id);
 cloud.createTask = (cid, id, data) =>
-  fsd().setDoc(taskRef(cid, id), { ...data, olusturma: cloud.now(), guncelleme: cloud.now() });
+  (cloud.count(0, 1), fsd().setDoc(taskRef(cid, id), { ...data, olusturma: cloud.now(), guncelleme: cloud.now() }));
 cloud.updateTask = (cid, id, patch) =>
-  fsd().updateDoc(taskRef(cid, id), { ...patch, guncelleme: cloud.now() });
+  (cloud.count(0, 1), fsd().updateDoc(taskRef(cid, id), { ...patch, guncelleme: cloud.now() }));
 
-cloud.createCategory = (id, ad) => fsd().setDoc(fsd().doc(cloud.db, 'categories', id), {
+cloud.createCategory = (id, ad) => (cloud.count(0, 1), fsd().setDoc(fsd().doc(cloud.db, 'categories', id), {
   ad, sahip: cloud.user.email, uyeler: [cloud.user.email], uyeAdlari: { [cloud.user.email]: cloud.user.ad || '' }, olusturma: cloud.now(),
-});
-cloud.setMembers = (cid, uyeler, uyeAdlari) => fsd().updateDoc(fsd().doc(cloud.db, 'categories', cid), { uyeler, uyeAdlari });
+}));
+cloud.setMembers = (cid, uyeler, uyeAdlari) => (cloud.count(0, 1), fsd().updateDoc(fsd().doc(cloud.db, 'categories', cid), { uyeler, uyeAdlari }));
 
 // Üyeyi çıkarır (sahip biri için ya da kişi kendi isteğiyle ayrılırken). Kurallar üye olmayan birini görevde kabul etmez;
 // bu yüzden önce o kişinin atamaları ve "bitiren" izi görevlerden temizlenir (kişi hâlâ üyeyken), sonra listeden çıkarılır.
@@ -135,6 +190,7 @@ cloud.removeMember = async (cid, email, uyeler, uyeAdlari) => {
   const col = fsd().collection(cloud.db, 'categories', cid, 'tasks');
   for (const field of ['atanan', 'bitiren']) {
     const snap = await fsd().getDocs(fsd().query(col, fsd().where(field, '==', email)));
+    cloud.count(snap.docs.length, snap.docs.length);
     for (let i = 0; i < snap.docs.length; i += 400) {
       const batch = fsd().writeBatch(cloud.db);
       snap.docs.slice(i, i + 400).forEach(d => batch.update(d.ref, { [field]: null, guncelleme: cloud.now() }));
@@ -143,11 +199,12 @@ cloud.removeMember = async (cid, email, uyeler, uyeAdlari) => {
   }
   await cloud.setMembers(cid, uyeler, uyeAdlari);
 };
-cloud.renameCategory = (cid, ad) => fsd().updateDoc(fsd().doc(cloud.db, 'categories', cid), { ad });
+cloud.renameCategory = (cid, ad) => (cloud.count(0, 1), fsd().updateDoc(fsd().doc(cloud.db, 'categories', cid), { ad }));
 
 // Kategoriyi siler: önce görevleri (kurallar görev silmeyi kategori belgesi varken izin verir), sonra kategoriyi
 cloud.deleteCategory = async cid => {
   const snap = await fsd().getDocs(fsd().collection(cloud.db, 'categories', cid, 'tasks'));
+  cloud.count(snap.docs.length, snap.docs.length);
   for (let i = 0; i < snap.docs.length; i += 400) {
     const batch = fsd().writeBatch(cloud.db);
     snap.docs.slice(i, i + 400).forEach(d => batch.delete(d.ref));
@@ -156,4 +213,19 @@ cloud.deleteCategory = async cid => {
   const batch = fsd().writeBatch(cloud.db);
   batch.delete(fsd().doc(cloud.db, 'categories', cid));
   await batch.commit();
+};
+
+// ============ Yönetici (admins/{uid} belgesi olan hesap; kurallar başkasına izin vermez) ============
+const adminList = async name => {
+  const snap = await fsd().getDocs(fsd().collection(cloud.db, name));
+  cloud.count(snap.docs.length, 0);
+  return snap.docs.map(d => { const x = d.data({ serverTimestamps: 'estimate' }); return { ...x, id: d.id, zaman: tsMs(x.zaman), guncelleme: tsMs(x.guncelleme) }; });
+};
+cloud.admin = {
+  listAllowed: () => adminList('allowed'),
+  listRequests: () => adminList('istekler'),
+  listUsage: () => adminList('kullanim'),
+  setAllowed: (uid, data) => (cloud.count(0, 1), fsd().setDoc(fsd().doc(cloud.db, 'allowed', uid), data)),
+  deleteAllowed: uid => (cloud.count(0, 1), fsd().deleteDoc(fsd().doc(cloud.db, 'allowed', uid))),
+  deleteRequest: uid => (cloud.count(0, 1), fsd().deleteDoc(fsd().doc(cloud.db, 'istekler', uid))),
 };

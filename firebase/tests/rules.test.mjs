@@ -61,13 +61,51 @@ describe('izin listesi ve giriş', () => {
   test('pasif hesap hiçbir şey göremez', async () => {
     await assertFails(getDoc(doc(db(PASIF), 'categories/k1')));
   });
-  test('izin listesi ve yönetici listesi istemciden yazılamaz ve listelenemez', async () => {
-    await assertFails(setDoc(doc(db(ALI), 'allowed', 'uid-ali'), { eposta: ALI.email, aktif: true }));
-    await assertFails(setDoc(doc(db(CAN), 'allowed', 'uid-can'), { eposta: CAN.email, aktif: false }));
+  test('yönetici olmayan hesap izin listesini yazamaz, listeleyemez; yönetici listesi hiç yazılamaz', async () => {
+    await assertFails(setDoc(doc(db(ALI), 'allowed', 'uid-ali'), { eposta: ALI.email, ad: 'Ali', aktif: true }));
+    await assertFails(setDoc(doc(db(CAN), 'allowed', 'uid-can'), { eposta: CAN.email, ad: 'Can', aktif: false }));
+    await assertFails(deleteDoc(doc(db(ALI), 'allowed', 'uid-veli')));
     await assertFails(getDocs(collection(db(ALI), 'allowed')));
     await assertFails(setDoc(doc(db(ALI), 'admins', 'uid-ali'), { eposta: ALI.email }));
+    await assertFails(setDoc(doc(db(ADMIN), 'admins', 'uid-ali'), { eposta: ALI.email }));   // yönetici bile admins'e yazamaz (yalnızca konsol)
     await assertSucceeds(getDoc(doc(db(ALI), 'allowed', 'uid-ali')));   // yalnızca kendi belgesini okur
     await assertFails(getDoc(doc(db(ALI), 'allowed', 'uid-veli')));
+  });
+  test('yönetici izin listesini listeler, ekler, değiştirir ve siler; geçersiz belge reddedilir', async () => {
+    const f = db(ADMIN);
+    await assertSucceeds(getDocs(collection(f, 'allowed')));
+    await assertSucceeds(setDoc(doc(f, 'allowed', 'uid-yeni'), { eposta: 'yeni@x.com', ad: 'Yeni', aktif: true }));
+    await assertSucceeds(updateDoc(doc(f, 'allowed', 'uid-yeni'), { aktif: false }));
+    await assertFails(setDoc(doc(f, 'allowed', 'uid-x'), { eposta: 'x@x.com', ad: 'X', aktif: 'evet' }));
+    await assertFails(setDoc(doc(f, 'allowed', 'uid-x'), { eposta: 'x@x.com', ad: 'X', aktif: true, rol: 'admin' }));
+    await assertSucceeds(deleteDoc(doc(f, 'allowed', 'uid-yeni')));
+    await assertSucceeds(getDoc(doc(f, 'allowed', 'uid-veli')));
+  });
+  test('"beni ekle" isteğini yalnızca kendi UID\'siyle ve kendi e-postasıyla yazabilir', async () => {
+    const now = serverTimestamp();
+    await assertSucceeds(setDoc(doc(db(YABANCI), 'istekler', YABANCI.uid), { eposta: YABANCI.email, zaman: serverTimestamp() }));
+    await assertFails(setDoc(doc(db(YABANCI), 'istekler', 'uid-ali'), { eposta: YABANCI.email, zaman: now }));          // başkasının belgesi
+    await assertFails(setDoc(doc(db(CAN), 'istekler', CAN.uid), { eposta: ALI.email, zaman: serverTimestamp() }));       // başkasının e-postası
+    await assertFails(setDoc(doc(db(CAN), 'istekler', CAN.uid), { eposta: CAN.email, zaman: serverTimestamp(), x: 1 })); // fazla alan
+    await assertFails(getDocs(collection(db(CAN), 'istekler')));
+    await assertSucceeds(getDoc(doc(db(YABANCI), 'istekler', YABANCI.uid)));
+    await assertFails(getDoc(doc(db(CAN), 'istekler', YABANCI.uid)));
+  });
+  test('yönetici istekleri listeler ve siler; başkası listeleyemez/silemez', async () => {
+    await setDoc(doc(db(YABANCI), 'istekler', YABANCI.uid), { eposta: YABANCI.email, zaman: serverTimestamp() });
+    await assertFails(deleteDoc(doc(db(YABANCI), 'istekler', YABANCI.uid)));
+    await assertSucceeds(getDocs(collection(db(ADMIN), 'istekler')));
+    await assertSucceeds(deleteDoc(doc(db(ADMIN), 'istekler', YABANCI.uid)));
+  });
+  test('kullanım sayacı: aktif hesap yalnızca kendi belgesine yazar; yönetici hepsini okur', async () => {
+    const ok = { eposta: CAN.email, gun: '2026-10-27', okuma: 12, yazma: 3, guncelleme: serverTimestamp() };
+    await assertSucceeds(setDoc(doc(db(CAN), 'kullanim', CAN.uid), ok));
+    await assertFails(setDoc(doc(db(CAN), 'kullanim', ALI.uid), { ...ok, guncelleme: serverTimestamp() }));                // başkasının belgesi
+    await assertFails(setDoc(doc(db(CAN), 'kullanim', CAN.uid), { ...ok, okuma: -1, guncelleme: serverTimestamp() }));
+    await assertFails(setDoc(doc(db(CAN), 'kullanim', CAN.uid), { ...ok, gun: 'bugün', guncelleme: serverTimestamp() }));
+    await assertFails(setDoc(doc(db(PASIF), 'kullanim', PASIF.uid), { ...ok, eposta: PASIF.email, guncelleme: serverTimestamp() }));  // pasif hesap yazamaz
+    await assertFails(getDocs(collection(db(CAN), 'kullanim')));
+    await assertSucceeds(getDocs(collection(db(ADMIN), 'kullanim')));
   });
 });
 

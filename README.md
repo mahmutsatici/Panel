@@ -63,9 +63,19 @@ listesine bakıp cevap verme Gemini'de oluyor, ayrı bir yerel konuşma tanımay
 - **Yedek model:** ana model "yoğun talep" / kota / bulunamadı hatası verirse Ayarlar → Spark → Yedek konuşma modelleri sırayla denenir.
 - Ses ve görev listesi metni yalnızca konuştuğun anda Google'a gider; konuşma geçmişi yalnızca bu bilgisayarda tutulur (son 30).
 
+## Ortak kategoriler (çok kullanıcılı, isteğe bağlı)
+Ayarlar → Hesap'tan e-posta + şifreyle giriş yapılırsa Yapılacaklar'da **＋ Ortak** ile başkalarıyla paylaşılan kategoriler açılır
+(üye ekleme/çıkarma 👥 düğmesinden, görev atama satırdaki yuvarlak düğmeden, **Bana atananlar** süzgeci). Giriş yapılmazsa uygulama tamamen yereldir.
+- **Gizlilik:** yalnızca ortak kategoriler ve görevleri Firebase'e (Firestore, Google) gider; kişisel kategoriler, notlar, ayarlar ve Gemini anahtarı
+  asla gitmez. Spark ortak görevleri de görür (Ayarlar → Spark → Ortak görevler ile kapatılabilir). Yerel yedek: `dataortak-kopya.json`.
+- **Erişim:** hesapları yönetici Firebase konsolundan açar (kendi kendine kayıt yok). Yeni kişi girince Ayarlar → Yönetici'de "Bekleyen istekler"e düşer; yönetici onaylar.
+  Güvenlik kuralları `firebase/firestore.rules` içindedir ve Firebase emülatöründe test edilir (`npm run test:rules`).
+- **Kendi Firebase projen:** `src/js/cloud-config.js` içine kendi web yapılandırmanı yaz (`null` = bulut kapalı), kuralları yayınla,
+  `admins/<uid>` ve `allowed/<uid>` belgelerini konsoldan oluştur. Web yapılandırması gizli değildir; koruma kurallar ve izin listesidir.
+
 ## Kod yapısı
 `src/js/` altında bölümler: `core` (ortak yardımcılar, tarih penceresi, doğal dil), `clock`, `weather`, `todos`,
-`calendar`, `assistant` (SPARK), `stats`, `notes`, `trash`, `layout`, `settings`; `src/app.js` başlangıç.
+`calendar`, `assistant` (SPARK), `stats`, `notes`, `trash`, `layout`, `settings`, `cloud` + `shared` + `admin` (ortak kategoriler); `src/app.js` başlangıç.
 Sabah bildirimi, otomatik yedek ve Gemini API çağrısı `main.js` içindedir (zamanlayıcı dakikada bir kontrol eder).
 - `notes\*.md` — her not ayrı bir Markdown dosyası
 - `settings.json` — şehir, tema, otomatik başlatma, hava durumu önbelleği

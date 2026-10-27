@@ -53,15 +53,20 @@ function renderWhenIdle() {
 }
 
 // --- Hata bildirimi (ör. kural reddi, çevrimdışı yazma): başlıktaki ⚠ üstünde ipucu ---
+let syncErrCode = null;
 function syncError(e) {
   console.error(e);
   const el = $('#syncNote');
+  syncErrCode = e?.code;
   el.hidden = false;
-  el.title = `Ortak kategoriler eşitlenemedi: ${e?.code || e?.message || e}`;
+  el.title = `Ortak kategoriler eşitlenemedi: ${cloudErrorText(e)}`;
 }
+// Bağlantı kopması geçicidir: sunucudan haber gelince ⚠ kalkar (kural reddi gibi kalıcı hatalar kalır)
+const clearNetError = () => { if (syncErrCode === 'unavailable') { $('#syncNote').hidden = true; syncErrCode = null; } };
 
 // --- Buluttan gelenler ---
 function applyCategories(docs) {
+  clearNetError();
   const ids = new Set(docs.map(d => d.id));
   for (const cat of sharedCats()) {
     if (ids.has(cat.cid)) continue;
@@ -105,6 +110,7 @@ function watchCatTasks(cid, attempt = 0) {
 }
 
 function applyTasks(cid, docs) {
+  clearNetError();
   const cat = sharedCats().find(c => c.cid === cid);
   if (!cat) return;
   const known = new Map(cat.tasks.filter(t => t.id).map(t => [t.id, t]));
@@ -157,7 +163,10 @@ function pushShared() {
         if (t.done) { t.completedBy = me; t.doneTs = Date.now(); }
       } else if (cat.base.get(t.id) !== sigOf(t)) {
         const was = JSON.parse(cat.base.get(t.id) || '[]');
-        const patch = { metin: t.text, bitti: !!t.done, son: t.due || null, tekrar: t.rec || null, atanan: t.assignee || null };
+        // Yalnızca değişen alanlar gönderilir: başkasının aynı anda başka bir alanda yaptığı değişiklik ezilmesin
+        const now = [t.text, !!t.done, t.due || null, t.rec || null, t.assignee || null];
+        const patch = {};
+        ['metin', 'bitti', 'son', 'tekrar', 'atanan'].forEach((k, i) => { if (was[i] !== now[i]) patch[k] = now[i]; });
         if (!!was[1] !== !!t.done) {
           patch.bitiren = t.done ? me : null;
           patch.bitirmeZamani = t.done ? cloud.now() : null;
@@ -267,7 +276,7 @@ function renderMembers(msg = '') {
       : '<div class="row"><button type="button" id="memLeave">Kategoriden ayrıl</button></div>'}
     <p class="mem-msg">${esc(msg)}</p>`;
   const run = async fn => {
-    try { await fn(); } catch (e) { syncError(e); renderMembers(`Olmadı: ${e.code || e.message}`); }
+    try { await fn(); } catch (e) { syncError(e); renderMembers(`Olmadı: ${cloudErrorText(e)}`); }
   };
   $('#memBody').querySelectorAll('[data-rm]').forEach(b => b.onclick = () => {
     const email = b.dataset.rm;

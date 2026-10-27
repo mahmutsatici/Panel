@@ -9,7 +9,7 @@ Aşağıdaki davranış ilkeleri [multica-ai/andrej-karpathy-skills](https://git
 - `main.js`: Electron ana süreç (pencere, tray, IPC, yedekleme, zamanlanmış bildirimler, otomatik başlatma).
 - `preload.js`: ana süreç ile arayüz arasındaki tek köprü. Yeni IPC kanalı burada ve `registerIpc()` içinde birlikte eklenir.
 - `src/index.html`, `src/styles.css`, `src/app.js`: arayüz kabuğu ve giriş noktası.
-- `src/js/`: özellik başına bir modül (`core`, `layout`, `clock`, `weather`, `todos`, `calendar`, `stats`, `notes`, `trash`, `settings`, `cloud`, `shared`). `core.js` ortak yardımcıları barındırır; `cloud.js` Firebase girişi/veri erişimi (Firebase'e yalnızca o dokunur), `shared.js` ortak kategorilerin görev listesiyle eşitlenmesi (todo.md'ye yazılmaz; yerel yedek `ortak-kopya.json`).
+- `src/js/`: özellik başına bir modül (`core`, `layout`, `clock`, `weather`, `todos`, `calendar`, `stats`, `notes`, `trash`, `settings`, `cloud`, `shared`, `admin`). `core.js` ortak yardımcıları barındırır; `cloud.js` Firebase girişi/veri erişimi (Firebase'e yalnızca o dokunur), `shared.js` ortak kategorilerin görev listesiyle eşitlenmesi (todo.md'ye yazılmaz; yerel yedek `ortak-kopya.json`).
 - `scripts/build.js`: esbuild ile paketleme. `scripts/editor-entry.js` not editörünün giriş noktası.
 - Veri dosyaları (`todo.md`, `settings.json`, not dosyaları) Markdown/JSON olarak diskte tutulur; biçimlerini bozma.
 
