@@ -904,3 +904,7 @@ body.solo .weather .w-body { align-items: stretch; }
 @keyframes ellipsis { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
 body.solo .stats .st-side .st-kv:nth-child(2) { display: none; }   /* açık/geciken zaten kutucuklarda */
 #acctStatus.err { color: var(--load-3); }
+
+/* Ortak kategoriler */
+.cat-head .shared-mark { font-size: var(--fs-meta); opacity: .75; cursor: help; }
+.sync-note { color: var(--load-3); font-size: var(--fs-sub); margin-left: 6px; cursor: help; }

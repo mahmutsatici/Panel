@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('panel', {
   todos: {
     read: () => call('todos:read'),
     write: content => call('todos:write', content),
+    writeShared: content => call('todos:writeShared', content),
   },
   notes: {
     list: () => call('notes:list'),

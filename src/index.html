@@ -101,10 +101,11 @@
     <!-- Yapılacaklar -->
     <section class="card todos" data-card="todos">
       <div class="card-head">
-        <h2>Yapılacaklar <span class="badge" id="todoCount"></span></h2>
+        <h2>Yapılacaklar <span class="badge" id="todoCount"></span><span class="sync-note" id="syncNote" hidden>⚠</span></h2>
         <div class="actions">
           <button class="text-btn" id="toggleDone"></button>
           <button class="text-btn" id="addCat" title="Yeni kategori">＋ Kategori</button>
+          <button class="text-btn" id="addSharedCat" title="Başkalarıyla ortak çalışacağın yeni kategori" hidden>＋ Ortak</button>
         </div>
       </div>
       <div id="todoList" class="todo-list"></div>
@@ -355,6 +356,7 @@
   <script src="js/clock.js"></script>
   <script src="js/weather.js"></script>
   <script src="js/todos.js"></script>
+  <script src="js/shared.js"></script>
   <script src="js/calendar.js"></script>
   <script src="js/assistant.js"></script>
   <script src="js/stats.js"></script>

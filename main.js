@@ -31,6 +31,7 @@ const dataDir = () => path.join(app.getPath('userData'), 'data');
 const notesDir = () => path.join(dataDir(), 'notes');
 const imagesDir = () => path.join(notesDir(), 'resimler');
 const todoFile = () => path.join(dataDir(), 'todo.md');
+const sharedCopyFile = () => path.join(dataDir(), 'ortak-kopya.json');   // ortak kategorilerin yerel yedeği (kaynak bulut)
 const settingsFile = () => path.join(dataDir(), 'settings.json');
 
 const DEFAULT_SETTINGS = {
@@ -620,6 +621,7 @@ async function geminiTts(text, voiceOverride) {
 function registerIpc() {
   ipcMain.handle('todos:read', () => fs.readFile(todoFile(), 'utf8'));
   ipcMain.handle('todos:write', (_e, content) => writeAtomic(todoFile(), String(content)));
+  ipcMain.handle('todos:writeShared', (_e, content) => writeAtomic(sharedCopyFile(), String(content)));
 
   // Pasif (silinmiş) notlar listede gösterilmez; dosyaları yerinde durur.
   ipcMain.handle('notes:list', async () =>

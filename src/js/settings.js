@@ -58,7 +58,12 @@ function renderAccount() {
   st.textContent = cloud.ready ? '' : 'Oturum kontrol ediliyor…';
   out.hidden = !!cloud.user || !cloud.ready;
   inn.hidden = !cloud.user;
-  $('#acctUser').textContent = cloud.user?.email || '';
+  $('#acctUser').textContent = cloud.user ? `${cloud.user.ad ? cloud.user.ad + ' · ' : ''}${cloud.user.email}` : '';
+  // Giriş yapılmış ama izin listesinde değilse (ya da liste okunamadıysa) ortak kategoriler kapalı kalır
+  if (cloud.user && !cloud.user.active) {
+    st.classList.add('err');
+    st.textContent = cloud.user.error ? `Hesap bilgisi okunamadı (${cloud.user.error}).` : 'Bu hesap henüz ortak çalışmaya açılmamış; yöneticine söyle. Panel yerel olarak çalışmaya devam eder.';
+  } else st.classList.remove('err');
 }
 cloud.onChange(renderAccount);
 async function acctSignIn() {
