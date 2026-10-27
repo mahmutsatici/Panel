@@ -273,6 +273,7 @@ $('#nameInput').addEventListener('input', e => {
 });
 $('#wRefresh').onclick = () => loadWeather(true);
 $('#openData').onclick = () => api.openDataDir();
+$('#quitApp').onclick = () => api.quit();
 $('#themeSelect').onchange = async e => { settings = await api.settings.set({ theme: e.target.value }); applyTheme(); };
 $('#autostartChk').onchange = async e => { settings = await api.settings.set({ autostart: e.target.checked }); };
 

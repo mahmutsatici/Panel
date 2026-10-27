@@ -1,0 +1,6 @@
+Panel 2.0.1 — küçük düzeltmeler
+===============================
+
+• Ayarlar → Sistem: "Uygulamadan çık" düğmesi (pencereyi kapatmak Panel'i yalnızca tepsiye gizler; bu düğme tamamen kapatır).
+• Ana panodaki takvimde bugün işareti eski, sade görünümüne döndü; tam ekran takvimdeki belirgin vurgu aynen duruyor.
+• Hesap sayfasında e-posta, şifre ve düğmeler arasındaki boşluk artırıldı.

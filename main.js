@@ -696,6 +696,7 @@ function registerIpc() {
     return withRuntime(s);
   });
   ipcMain.handle('app:openDataDir', () => shell.openPath(dataDir()));
+  ipcMain.handle('app:quit', () => { quitting = true; app.quit(); });
 
   // Bildirim ve yedek ayarları ana süreçte birleştirilir (zamanlayıcının yazdıklarıyla çakışmasın)
   ipcMain.handle('notify:config', async (_e, patch) => {

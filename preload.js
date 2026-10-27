@@ -46,5 +46,6 @@ contextBridge.exposeInMainWorld('panel', {
   },
   setTitleBar: (color, symbolColor) => call('app:titleBar', color, symbolColor),
   openDataDir: () => call('app:openDataDir'),
+  quit: () => call('app:quit'),
   openExternal: url => call('app:openExternal', url),
 });
