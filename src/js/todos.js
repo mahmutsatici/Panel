@@ -301,9 +301,9 @@ function taskTitle(task) {
   return parts.join('\n');
 }
 function dueButtonHtml(task) {
-  const rec = task.rec ? `<span class="rec" title="${esc(recLabel(task.rec))}">↻</span>` : '';
-  const bell = task.remind?.length ? `<span class="bell" title="${esc('Hatırlat: ' + task.remind.map(remindLabel).join(', '))}">🔔</span>` : '';
-  if (!task.due) return `<button class="due ${task.rec || bell ? 'future' : 'none'}" title="Son tarih ekle">${rec}${bell || (rec ? '' : '📅')}</button>`;
+  const rec = task.rec ? `<span class="rec" title="${esc(recLabel(task.rec))}">${ico('repeat')}</span>` : '';
+  const bell = task.remind?.length ? `<span class="bell" title="${esc('Hatırlat: ' + task.remind.map(remindLabel).join(', '))}">${ico('bell')}</span>` : '';
+  if (!task.due) return `<button class="due ${task.rec || bell ? 'future' : 'none'}" title="Son tarih ekle">${rec}${bell || (rec ? '' : ico('calendar'))}</button>`;
   const d = dueInfo(task.due, task.done);
   const recTip = task.rec ? `\nTekrar: ${recLabel(task.rec)}` : '';
   const timeTip = task.time ? `\nSaat: ${task.time}` : '';
@@ -326,7 +326,7 @@ function buildTaskRow(cat, task, { drag = true, showCat = false, flat = false, c
     + (cat.shared ? assigneeButtonHtml(cat, task) : '')
     + (showCat ? `<span class="cat-tag" style="--c:${catColor(cat)}">${cat.icon ? `<span class="cat-ico">${cat.icon}</span>` : '<span class="dot"></span>'}${esc(cat.name)}</span>` : '')
     + dueButtonHtml(task)
-    + '<button class="row-add prio" title="Öncelik">⚑</button>'
+    + `<button class="row-add prio" title="Öncelik">${ico('flag')}</button>`
     + (cat.shared || flat ? '' : '<button class="row-add" title="Altına görev ekle">＋</button>')   // ortak kategoride sıra oluşturma tarihine göre; yalnızca alt görev eklenir
     + (flat || lvl(task) >= MAX_LEVEL ? '' : '<button class="row-add sub-add" title="Alt görev ekle">⤷</button>')
     + '<button class="del" title="Sil">✕</button>';
@@ -426,7 +426,7 @@ function renderTodos() {
         <span class="cnt" title="Yapılmamış / toplam">${openCount}${cat.tasks.length ? ' / ' + cat.tasks.length : ''}</span>
         <span class="tools">
           <button class="add" title="Bu kategoriye görev ekle">＋</button>
-          <button class="ico" title="Kategori simgesi">☺</button>
+          <button class="ico" title="Kategori simgesi">${ico('smile')}</button>
           ${cat.shared && !isOwner(cat) ? '' : '<button class="ren" title="Yeniden adlandır">✎</button>'}
           ${cat.shared && !isOwner(cat) ? '' : '<button class="del" title="Kategoriyi sil">🗑</button>'}
         </span>
@@ -677,9 +677,9 @@ function buildNewTaskRow() {
     return { due: nl.due || (time && !p.due ? todayISO() : p.due), rec: nl.rec || p.rec, time, fromText: !!(nl.due || nl.rec || nl.time) };
   };
   const renderDue = () => {
-    const e = effective(), rec = e.rec ? '↻ ' : '', bell = p.remind.length ? ' 🔔' : '';
-    if (e.due) { const d = dueInfo(e.due, false); dueBtn.textContent = `📅 ${rec}${d.label}${e.time ? ' ' + e.time : ''}${bell}`; dueBtn.className = `due-btn ${d.cls}`; }
-    else { dueBtn.textContent = `📅 ${rec}Tarihsiz`; dueBtn.className = 'due-btn none'; }
+    const e = effective(), rec = e.rec ? ico('repeat') : '', bell = p.remind.length ? ico('bell') : '';
+    if (e.due) { const d = dueInfo(e.due, false); dueBtn.innerHTML = `${ico('calendar')}${rec}<span>${d.label}${e.time ? ' ' + e.time : ''}</span>${bell}`; dueBtn.className = `due-btn ${d.cls}`; }
+    else { dueBtn.innerHTML = `${ico('calendar')}${rec}<span>Tarihsiz</span>`; dueBtn.className = 'due-btn none'; }
     dueBtn.classList.toggle('nl', e.fromText);
     dueBtn.title = e.fromText ? 'Yazdığın metinden algılandı' : 'Son tarih (değiştirmek için tıkla)';
   };

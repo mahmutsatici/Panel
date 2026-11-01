@@ -1,0 +1,12 @@
+Panel 2.3.0 — Tasarım düzeltmeleri
+==================================
+
+• Tarih / saat / hatırlatıcı penceresi baştan tasarlandı: yarı boyuta indi (~400 px), üstte yazı kutusu ve hızlı günler, ortada takvim; Saat, Hatırlat ve Tekrar çipleriyle aynı alanda açılır.
+  Saat seçimi kaydırılabilir 15 dakikalık liste (00 / 15 / 30 / 45); seçili değerler çipte görünür ve × ile tek tıkla kalkar.
+• Emoji simgeler (saat, zil, bayrak, tekrar, takvim, gülen yüz) yerine sayfa simgeleriyle aynı çizgi simgeleri kullanıldı.
+• Takvim Hafta/Gün çizelgesi artık günün tamamını (00:00–24:00) gösterir ve kaydırılır; bugün ya da 07:00 civarına açılır. Gün görünümünde sağ-sol boşluk eklendi.
+  Tıklanan saat tek çizgi + saat etiketiyle işaretlenir. "Gün boyu" görevleri onay halkalı, daha okunaklı satırlar oldu (halkaya tıklayınca tamamlanır).
+• Gün penceresi: kategori seçimi simgeli açılır liste oldu; kapatma düğmesi güçlendirildi.
+• Ay görünümünde görev noktaları numaranın altında, daha belirgin.
+• Saniyeli dijital saat: gerçek LCD saat gibi yedi parçalı yeşil rakamlar, sönük parçalar silik, iki nokta saniyede bir yanıp söner (küçük kartta ve tam ekranda).
+• Yapılacaklar panosu: sütun içeriği taşmaz, varsayılan 2 sütun.

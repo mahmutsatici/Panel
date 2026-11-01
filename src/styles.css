@@ -1029,7 +1029,7 @@ body.solo .todo-views { display: inline-flex; }
 #todoList[data-mode="list"] { display: block; max-width: 880px; margin-left: auto; margin-right: auto; width: 100%; }
 #todoList[data-mode="list"] .cat { background: none; border: 0; padding: 0; margin-bottom: 14px; }
 #todoList[data-mode="list"] .tv-add { margin-bottom: 14px; }
-#todoList[data-mode="board"] { display: grid; grid-template-columns: repeat(var(--tv-cols, 3), minmax(0, 1fr)); gap: 12px; align-items: stretch; align-content: start; }
+#todoList[data-mode="board"] { display: grid; grid-template-columns: repeat(var(--tv-cols, 3), minmax(0, 1fr)); grid-auto-rows: max-content; gap: 12px; align-items: stretch; align-content: start; }
 #todoList[data-mode="board"] .cat { display: flex; flex-direction: column; margin: 0; background: var(--card-2); border: 1px solid var(--line); border-top: 3px solid var(--accent); border-radius: 14px; padding: 4px 8px 8px; min-height: 160px; }
 #todoList[data-mode="board"] .cat.drop { outline: 2px dashed var(--accent); background: var(--accent-soft); }
 #todoList[data-mode="board"] .cat ul { flex: 1; }
@@ -1108,3 +1108,74 @@ button.cat-ico { border: 0; background: none; padding: 0 2px; cursor: pointer; }
 .todo-list .cat-head .name { font-size: var(--fs-title); }
 
 @container (min-width: 720px) { .todo-list .cat { margin: 0; } }
+
+/* LCD saat (saniyeli dijital görünüm): koyu ekran, yeşil yanan parçalar, silik sönük parçalar */
+.clock .lcd { display: none; }
+.clock[data-mode="seconds"] .time { display: none; }
+.clock[data-mode="seconds"] .lcd {
+  display: flex; align-items: center; justify-content: center; gap: 3px; align-self: center; box-sizing: border-box;
+  height: 76px; padding: 12px 18px; margin: 4px 0; border-radius: 14px;
+  background: linear-gradient(180deg, #0e1a16, #08110e);
+  box-shadow: inset 0 2px 14px rgba(0,0,0,.75), inset 0 0 0 1px rgba(255,255,255,.04), 0 0 0 3px #1c2a26, 0 8px 22px rgba(0,0,0,.35);
+  --lcd: #72f5ae;
+}
+body.solo .clock[data-mode="seconds"] .lcd { height: min(34vh, 18vw); padding: min(4vh, 2vw) min(5vh, 3vw); gap: min(1vh, .6vw); border-radius: min(3vh, 2vw); }
+.lcd-d { height: 100%; width: auto; aspect-ratio: 64 / 104; transform: skewX(-5deg); overflow: visible; }
+.lcd-d .on { fill: var(--lcd); filter: drop-shadow(0 0 4px color-mix(in srgb, var(--lcd) 70%, transparent)); }
+.lcd-d .off { fill: color-mix(in srgb, var(--lcd) 8%, transparent); }
+.lcd-c { height: 100%; width: auto; aspect-ratio: 16 / 104; transform: skewX(-5deg); overflow: visible; }
+.lcd-c rect { fill: color-mix(in srgb, var(--lcd) 8%, transparent); }
+.lcd-c.on rect { fill: var(--lcd); filter: drop-shadow(0 0 4px color-mix(in srgb, var(--lcd) 70%, transparent)); }
+
+/* Çizgi simgeleri yazı içinde (düğmelerde) */
+.due .ico, .due-btn .ico, .cd-t .ico, .cd-timebtn .ico, .row-add .ico, .tools .ico, .cal-tasks .ico, .cal-tl-lbl .ico { display: inline-block; vertical-align: -0.16em; }
+.due .rec .ico, .cal-tasks .rec .ico { margin-right: 2px; }
+.due .bell .ico, .due-btn .bell .ico, .cal-tasks .bell .ico { width: .95em; height: .95em; }
+.due-btn .ico { margin-right: 4px; }
+.cd-t .ico { color: var(--muted); }
+.cal-tasks .bell { color: var(--accent); margin-left: 2px; }
+
+/* Pano: sütun içeriği taşmaz, sütun içeriğine göre uzar */
+#todoList[data-mode="board"] .cat ul { flex: 1 1 auto; }
+
+/* Ay görünümü: görev noktaları numaranın altında, belirgin */
+.cal-n { height: min(28px, calc(100% - 9px)); }
+.cal-dots { height: 5px; gap: 3px; }
+.cal-dots i { width: 5px; height: 5px; }
+.cal-d .cal-dots { bottom: 3px; }
+
+/* Hafta/Gün çizelgesi */
+.cal-tl.day { padding: 0 clamp(12px, 7%, 140px); }
+.cal-tl-lbl { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; line-height: 1.2; }
+.cal-tl-lbl .ico { width: 15px; height: 15px; }
+.cal-tl-allday { padding: 6px 0; background: color-mix(in srgb, var(--accent) 4%, transparent); border-radius: 8px; }
+.cal-ad { min-height: 30px; max-height: 120px; gap: 4px; padding: 1px 2px; }
+.cal-ad-item { display: flex; align-items: center; gap: 6px; padding: 3px 8px 3px 6px; font-size: var(--fs-sub); line-height: 1.35; cursor: pointer; }
+.cal-ad-item .cal-ad-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-chk { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--c); display: grid; place-items: center; color: transparent; }
+.cal-chk .ico { width: 11px; height: 11px; stroke-width: 2.6; }
+.cal-chk:hover { background: color-mix(in srgb, var(--c) 25%, transparent); }
+.cal-ad-item.done .cal-chk { background: var(--c); color: #fff; }
+/* tıklanan saat: tek çizgi + saat etiketi */
+.cal-pick { height: 0 !important; border: 0 !important; border-top: 2px solid var(--accent) !important; background: none !important; padding: 0 !important; }
+.cal-pick::before { content: attr(data-t); position: absolute; left: 4px; top: -17px; background: var(--accent); color: #fff; font-size: 10px; font-weight: 700; line-height: 15px; padding: 0 6px; border-radius: 99px; }
+
+/* Gün penceresi: kategori düğmesi ve açılır listesi */
+.cd-timebtn, .cd-catbtn { display: inline-flex; align-items: center; gap: 6px; }
+.cd-timebtn .ico { width: 14px; height: 14px; }
+.cd-catbtn { flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--card); border-radius: 99px; padding: 3px 10px 3px 8px; font-size: var(--fs-sub); color: var(--text); }
+.cd-catbtn:hover { border-color: var(--accent); }
+.cd-catbtn .cb-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.cd-catbtn i { font-style: normal; color: var(--muted); font-size: 10px; }
+.cb-mark { display: inline-flex; align-items: center; justify-content: center; width: 16px; flex: none; }
+.cat-pop { position: fixed; z-index: 46; display: flex; flex-direction: column; gap: 2px; max-height: 280px; overflow-y: auto; padding: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 18px 44px rgba(0,0,0,.42); }
+.cat-pop[hidden] { display: none; }
+.cat-pop button { display: flex; align-items: center; gap: 8px; border: 0; background: none; color: var(--text); text-align: left; padding: 6px 10px; border-radius: 8px; font-size: var(--fs-sub); }
+.cat-pop button:hover { background: var(--card-2); }
+.cat-pop button.on { color: var(--accent); font-weight: 650; }
+.cat-pop .cp-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat-pop .cp-tag { font-size: var(--fs-meta); color: var(--muted); background: var(--card-2); border-radius: 99px; padding: 0 7px; }
+.cat-pop .ico { width: 14px; height: 14px; flex: none; }
+
+.cd-catbtn .ico { width: 14px; height: 14px; color: var(--muted); flex: none; }
+.cal-tl-body { padding-top: 8px; }

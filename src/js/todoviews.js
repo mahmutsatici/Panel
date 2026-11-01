@@ -3,7 +3,7 @@
 // Kategoriye göre gruplama her zaman kategori kartlarının kendi çizimidir (sürükle-bırak, yeniden adlandırma...); biçim yalnızca yerleşimi değiştirir.
 // Diğer gruplamalar tüm görevleri düz listede toplayıp gruplar (alt görevler üst görevin adıyla gösterilir).
 let todoMode = store.get('todoMode', 'list');    // 'card' | 'list' | 'board'
-let todoCols = store.get('todoCols', 'auto');    // pano sütun sayısı: 'auto' | '2' | '3' | '4'
+let todoCols = store.get('todoCols', '2');    // pano sütun sayısı: 'auto' | '2' | '3' | '4'
 let todoGroup = store.get('todoGroup', 'cat');   // 'cat' | 'day' | 'prio' | 'done'
 const soloTodos = () => document.body.classList.contains('solo');
 const categoryCards = () => !soloTodos() || todoGroup === 'cat';

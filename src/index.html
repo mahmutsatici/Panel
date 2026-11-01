@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="vendor/editor.css">
   <link rel="stylesheet" href="vendor/editor-dark.css">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="datepop.css">
 </head>
 <body>
   <!-- Üst çubuk: düzenleme ve ayarlar (kartlardan bağımsız) -->
@@ -37,6 +38,7 @@
       <div class="clock-body">
         <div class="greet" id="greet"></div>
         <div class="time" id="time">--:--</div>
+        <div class="lcd" id="lcd" aria-hidden="true"></div>
         <svg class="analog" id="analog" viewBox="0 0 200 200" aria-hidden="true"></svg>
         <div class="date" id="date"></div>
         <div class="sub" id="dayInfo"></div>
@@ -145,6 +147,7 @@
   <div class="prio-pop" id="prioPop" hidden></div>
   <div class="time-pop" id="timePop" hidden></div>
   <div class="icon-pop" id="iconPop" hidden></div>
+  <div class="cat-pop" id="catPop" hidden></div>
 
   <!-- Görev son tarihi ve tekrarı için açılır pencere (js/core.js → pickDate) -->
   <div class="date-pop" id="datePop" hidden></div>
@@ -389,6 +392,7 @@
   <script src="../node_modules/marked/lib/marked.umd.js"></script>
   <script src="../node_modules/dompurify/dist/purify.min.js"></script>
   <script src="vendor/editor.js"></script>
+  <script src="js/icons.js"></script>
   <script src="js/core.js"></script>
   <script src="vendor/cloud.js"></script>
   <script src="js/cloud-config.js"></script>

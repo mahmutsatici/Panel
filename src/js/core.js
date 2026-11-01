@@ -174,13 +174,15 @@ function remindAt(task, tok) {
 }
 
 // ============ Tarih penceresi ============
-// Görev son tarihi ve tekrarı için ortak açılır pencere: hızlı seçenekler, yazarak tarih,
-// küçük ay görünümü ve tekrar seçenekleri. onChange({ due, rec }) ile bildirir.
+// Görev son tarihi, saati, hatırlatıcıları ve tekrarı için ortak açılır pencere: yazarak tarih, hızlı günler,
+// ortada değişen bir gövde (ay görünümü / saat listesi / hatırlatıcı / tekrar) ve altta bu değerlerin çipleri.
+// onChange({ due, rec, time, remind }) ile her değişimde bildirir.
 const datePop = document.getElementById('datePop');
 let datePopState = null;
 function pickDate(anchor, { due = null, rec = null, time = null, remind = [], allowRec = true, allowTime = true } = {}, onChange, onClose) {
   const base = due || todayISO();
-  datePopState = { anchor, due, rec, time, remind: [...remind], allowRec, allowTime, open: null, onChange, onClose, month: new Date(parseISODate(base).getFullYear(), parseISODate(base).getMonth(), 1) };
+  // view: gövdede ne görünüyor ('cal' | 'time' | 'remind' | 'rec'); keep: kullanıcı ayrıntı ayarlamaya başladıysa gün seçimi pencereyi kapatmaz
+  datePopState = { anchor, due, rec, time, remind: [...remind], allowRec, allowTime, view: 'cal', keep: false, onChange, onClose, month: new Date(parseISODate(base).getFullYear(), parseISODate(base).getMonth(), 1) };
   renderDatePop();
   datePop.hidden = false;
   positionDatePop();
@@ -207,19 +209,20 @@ function commitDate(patch, close) {
   // Liste yeniden çizilince bağlı düğme yok olabilir; o zaman pencere olduğu yerde kalsın
   if (close) closeDatePop(); else { renderDatePop(); if (datePopState.anchor.isConnected) positionDatePop(); }
 }
-// ---- Saat seçici: saat düğmeleri (00–23) + dakika düğmeleri (00 15 30 45) ----
+// ---- Saat seçici: 15 dakikalık adımlarla kaydırılabilir liste (her satır bir saat: SS:00 SS:15 SS:30 SS:45) ----
 const TIME_MINS = ['00', '15', '30', '45'];
-function timeGridHtml(value) {
-  const [h, m] = value ? value.split(':') : [null, null];
-  const hours = Array.from({ length: 24 }, (_, i) => { const hh = String(i).padStart(2, '0'); return `<button type="button" data-h="${hh}" class="${h === hh ? 'on' : ''}">${hh}</button>`; }).join('');
-  const mins = TIME_MINS.map(mm => `<button type="button" data-m="${mm}" class="${m === mm ? 'on' : ''}">:${mm}</button>`).join('');
-  return `<div class="tg"><div class="tg-h">${hours}</div><div class="tg-m">${mins}</div></div>`;
+const timeOpts = Array.from({ length: 96 }, (_, i) => `${String(i >> 2).padStart(2, '0')}:${TIME_MINS[i & 3]}`);
+function timeListHtml(value) {
+  const rows = Array.from({ length: 24 }, (_, h) => `<div class="tl-row">${timeOpts.slice(h * 4, h * 4 + 4)
+    .map(t => `<button type="button" data-t="${t}" class="${t === value ? 'on' : ''}">${t}</button>`).join('')}</div>`).join('');
+  return `<div class="tl">${rows}</div>`;
 }
-// onPick(saat, tamam): saat seçilince "SS:00" (tamam=false), dakika seçilince "SS:DD" (tamam=true)
-function bindTimeGrid(root, value, onPick) {
-  const [h, m] = value ? value.split(':') : ['09', '00'];
-  root.querySelectorAll('[data-h]').forEach(b => b.onclick = () => onPick(`${b.dataset.h}:${value ? m : '00'}`, false));
-  root.querySelectorAll('[data-m]').forEach(b => b.onclick = () => onPick(`${value ? h : '09'}:${b.dataset.m}`, true));
+// Düğmeleri bağlar ve listeyi seçili saate (yoksa 09:00'a) kaydırır; liste görünür olduktan sonra çağrılmalı
+function bindTimeList(root, value, onPick) {
+  const list = root.querySelector('.tl');
+  list.querySelectorAll('[data-t]').forEach(b => b.onclick = () => onPick(b.dataset.t));
+  const row = list.children[value ? +value.slice(0, 2) : 9];
+  list.scrollTop = row.offsetTop - (list.clientHeight - row.offsetHeight) / 2;
 }
 // Tek başına açılan saat penceresi (gün penceresindeki "Saat" düğmesi için)
 const timePop = document.getElementById('timePop');
@@ -227,13 +230,10 @@ let timePopAnchor = null;
 function closeTimePop() { timePop.hidden = true; timePopAnchor = null; }
 function pickTime(anchor, value, onPick) {
   timePopAnchor = anchor;
-  const draw = v => {
-    timePop.innerHTML = `${timeGridHtml(v)}<div class="tg-foot"><button type="button" data-none>Saatsiz</button></div>`;
-    bindTimeGrid(timePop, v, (t, done) => { onPick(t); if (done) closeTimePop(); else draw(t); });
-    timePop.querySelector('[data-none]').onclick = () => { onPick(null); closeTimePop(); };
-  };
-  draw(value);
+  timePop.innerHTML = `<div class="tp-h">${ico('clock')}<b>Saat</b><button type="button" class="dp-clear${value ? '' : ' on'}" data-none>Saatsiz</button></div>${timeListHtml(value)}`;
+  timePop.querySelector('[data-none]').onclick = () => { onPick(null); closeTimePop(); };
   timePop.hidden = false;
+  bindTimeList(timePop, value, t => { onPick(t); closeTimePop(); });
   const r = anchor.getBoundingClientRect(), w = timePop.offsetWidth, h = timePop.offsetHeight;
   timePop.style.left = `${Math.min(Math.max(8, r.left), innerWidth - w - 8)}px`;
   timePop.style.top = `${Math.max(8, r.bottom + 6 + h > innerHeight - 8 ? r.top - h - 6 : r.bottom + 6)}px`;
@@ -245,67 +245,102 @@ function renderDatePop() {
   const s = datePopState, today = todayISO();
   const nextMonday = (() => { let d = addDays(today, 1); while (parseISODate(d).getDay() !== 1) d = addDays(d, 1); return d; })();
   const quick = [['Bugün', today], ['Yarın', addDays(today, 1)], ['Haftaya', addDays(today, 7)], ['Pazartesi', nextMonday]];
-  const m = s.month;
-  const offset = (m.getDay() + 6) % 7;
-  const start = new Date(m.getFullYear(), m.getMonth(), 1 - offset);
-  const weeks = Math.ceil((offset + new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate()) / 7);
-  let days = WEEKDAY_SHORT.map(w => `<span class="dp-wd">${w}</span>`).join('');
-  for (let i = 0; i < weeks * 7; i++) {
-    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i), iso = isoOf(d);
-    const cls = ['dp-d', d.getMonth() !== m.getMonth() && 'other', iso === today && 'today', iso === s.due && 'sel', i % 7 > 4 && 'we'].filter(Boolean).join(' ');
-    days += `<button type="button" class="${cls}" data-iso="${iso}">${d.getDate()}</button>`;
-  }
-  // Açılır bölümler: Saat / Hatırlatıcı / Tekrar. Başlıkta mevcut değer görünür, tıklayınca ayrıntı açılır.
-  const sec = (id, icon, title, value, body) => `<div class="dp-sec${s.open === id ? ' open' : ''}">
-    <button type="button" class="dp-sec-h" data-open="${id}"><span>${icon} ${title}</span><span class="dp-val${value ? ' set' : ''}">${esc(value || 'Yok')}</span><i>${s.open === id ? '▾' : '▸'}</i></button>
-    ${s.open === id ? `<div class="dp-sec-b">${body}</div>` : ''}</div>`;
-  const timeBody = `${timeGridHtml(s.time)}${s.time ? '<div class="tg-foot"><button type="button" data-time="">Saati kaldır</button></div>' : ''}`;
   const customRem = s.remind.filter(t => !REMIND_PRESETS.some(([n]) => n + 'dk' === t));
-  const hourOpts = Array.from({ length: 24 }, (_, i) => `<option>${String(i).padStart(2, '0')}</option>`).join('');
-  const remBody = `<div class="dp-chips">${REMIND_PRESETS.map(([n, l]) => `<button type="button" data-remind="${n}dk" class="${s.remind.includes(n + 'dk') ? 'on' : ''}" ${s.time ? '' : 'disabled title="Önce saat seç"'}>${l}</button>`).join('')}
-    ${customRem.map(t => `<button type="button" data-remind="${t}" class="on" title="Kaldır">${esc(remindLabel(t))} ✕</button>`).join('')}</div>
-    <div class="dp-remind-add"><span class="muted">Belirli zaman</span><input type="date" class="dp-rd" value="${s.due || today}">
-      <select class="dp-rh">${hourOpts}</select><select class="dp-rm">${TIME_MINS.map(x => `<option>${x}</option>`).join('')}</select><button type="button" class="dp-radd">Ekle</button></div>`;
-  const recBody = `<div class="dp-chips"><button type="button" data-rec="" class="${s.rec ? '' : 'on'}">Yok</button>
-    ${REC_PRESETS.map(([k, l]) => `<button type="button" data-rec="${k}" class="${s.rec === k ? 'on' : ''}">${l}</button>`).join('')}
-    ${s.rec && !REC_PRESETS.some(([k]) => k === s.rec) ? `<button type="button" data-rec="${esc(s.rec)}" class="on">${esc(recLabel(s.rec))}</button>` : ''}</div>`;
+  // Gövde başlığı (ay görünümü dışındaki bölümler): geri + başlık + sağda isteğe bağlı düğme
+  const paneHead = (icon, title, extra = '') => `<div class="dp-pane-h"><button type="button" class="dp-nav" data-view="cal" title="Takvime dön">${ico('chev-l')}</button>${ico(icon)}<b>${title}</b>${extra}</div>`;
+  let body;
+  if (s.view === 'time') {
+    body = paneHead('clock', 'Saat', `<button type="button" class="dp-clear${s.time ? '' : ' on'}" data-time-none>Saatsiz</button>`) + timeListHtml(s.time);
+  } else if (s.view === 'remind') {
+    body = `${paneHead('bell', 'Hatırlatıcı')}
+      <div class="dp-sub">Görev saatine göre${s.time ? ` <span>(${s.time})</span>` : ''}</div>
+      <div class="dp-chips">${REMIND_PRESETS.map(([n, l]) => `<button type="button" data-remind="${n}dk" class="${s.remind.includes(n + 'dk') ? 'on' : ''}" ${s.time ? '' : 'disabled'}>${s.remind.includes(n + 'dk') ? ico('check') : ''}${l}</button>`).join('')}</div>
+      ${s.time ? '' : '<p class="dp-hint">Bu seçenekler için görevin saati olmalı. <button type="button" class="dp-link" data-view="time">Saat seç</button></p>'}
+      <div class="dp-sub">Belirli zaman</div>
+      <div class="dp-radd-row"><input type="date" class="dp-rd" value="${s.due || today}" aria-label="Hatırlatma günü">
+        <select class="dp-rt" aria-label="Hatırlatma saati">${timeOpts.map(t => `<option${t === (s.time && timeOpts.includes(s.time) ? s.time : '09:00') ? ' selected' : ''}>${t}</option>`).join('')}</select>
+        <button type="button" class="dp-radd" title="Hatırlatıcı ekle">${ico('plus')}Ekle</button></div>
+      ${customRem.length ? `<div class="dp-chips">${customRem.map(t => `<span class="dp-tok">${esc(remindLabel(t))}<button type="button" data-remind="${t}" title="Kaldır" aria-label="Kaldır">${ico('x')}</button></span>`).join('')}</div>` : ''}`;
+  } else if (s.view === 'rec') {
+    const custom = s.rec && !REC_PRESETS.some(([k]) => k === s.rec);
+    body = `${paneHead('repeat', 'Tekrar')}
+      <div class="dp-chips dp-rec-chips"><button type="button" data-rec="" class="${s.rec ? '' : 'on'}">Tekrar yok</button>
+      ${REC_PRESETS.map(([k, l]) => `<button type="button" data-rec="${k}" class="${s.rec === k ? 'on' : ''}">${s.rec === k ? ico('check') : ''}${l}</button>`).join('')}
+      ${custom ? `<button type="button" data-rec="${esc(s.rec)}" class="on">${ico('check')}${esc(recLabel(s.rec))}</button>` : ''}</div>
+      <p class="dp-hint">Tamamlanınca görev bir sonraki tarihle yeniden oluşur.</p>`;
+  } else {
+    // Ay görünümü: yükseklik sabit kalsın diye her zaman 6 hafta
+    const m = s.month, offset = (m.getDay() + 6) % 7;
+    let days = WEEKDAY_SHORT.map(w => `<span class="dp-wd">${w}</span>`).join('');
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(m.getFullYear(), m.getMonth(), 1 - offset + i), iso = isoOf(d);
+      const cls = ['dp-d', d.getMonth() !== m.getMonth() && 'other', iso === today && 'today', iso === s.due && 'sel', i % 7 > 4 && 'we', iso < today && 'past'].filter(Boolean).join(' ');
+      days += `<button type="button" class="${cls}" data-iso="${iso}" aria-label="${fmtLong.format(d)}">${d.getDate()}</button>`;
+    }
+    body = `<div class="dp-cal-h">
+        <b>${fmtMonthYear.format(m)}</b>
+        <button type="button" class="dp-nav" data-m="-1" title="Önceki ay">${ico('chev-l')}</button>
+        <button type="button" class="dp-nav" data-m="1" title="Sonraki ay">${ico('chev-r')}</button>
+      </div>
+      <div class="dp-grid">${days}</div>`;
+  }
+  // Alt çipler: değer varsa göster (ve × ile kaldır), yoksa soluk etiket; tıklayınca gövdede o bölüm açılır
+  const prop = (view, icon, label, value, clear) => `<span class="dp-prop${value ? ' set' : ''}${s.view === view ? ' cur' : ''}">
+    <button type="button" class="dp-prop-b" data-view="${view}" title="${label}">${ico(icon)}<span>${esc(value || label)}</span></button>
+    ${value ? `<button type="button" class="dp-prop-x" data-clear="${clear}" title="${label}: kaldır" aria-label="${label}: kaldır">${ico('x')}</button>` : ''}</span>`;
+  const remVal = s.remind.length > 1 ? `${s.remind.length} hatırlatıcı` : s.remind.length ? remindLabel(s.remind[0]) : '';
+  const props = [
+    s.allowTime && prop('time', 'clock', 'Saat', s.time, 'time'),
+    s.allowTime && prop('remind', 'bell', 'Hatırlat', remVal, 'remind'),
+    s.allowRec && prop('rec', 'repeat', 'Tekrar', s.rec ? recLabel(s.rec) : '', 'rec'),
+  ].filter(Boolean).join('');
+  const sum = s.due ? `${fmtLong.format(parseISODate(s.due))}${s.time ? ` · ${s.time}` : ''}` : 'Tarih yok';
+  const enter = s.view !== s.shown;   // bölüm değiştiyse gövde hafifçe belirsin
+  s.shown = s.view;
   datePop.innerHTML = `
+    <label class="dp-in">${ico('calendar')}<input class="dp-text" placeholder="Yaz: cuma 15:30, 3 gün sonra, her hafta" autocomplete="off" spellcheck="false"></label>
     <div class="dp-quick">
       ${quick.map(([l, iso]) => `<button type="button" data-iso="${iso}" class="${s.due === iso ? 'on' : ''}">${l}</button>`).join('')}
-      <button type="button" data-iso="" class="none ${s.due ? '' : 'on'}">Tarihsiz</button>
+      <button type="button" data-iso="" class="none${s.due ? '' : ' on'}" title="Tarihi kaldır">Tarihsiz</button>
     </div>
-    <input class="dp-text" placeholder="Yaz: cuma 15:30, 15 ekim, 3 gün sonra… (Enter)" autocomplete="off">
-    <div class="dp-head">
-      <button type="button" class="dp-nav" data-m="-1">‹</button>
-      <b>${fmtMonthYear.format(m)}</b>
-      <button type="button" class="dp-nav" data-m="1">›</button>
-    </div>
-    <div class="dp-grid">${days}</div>
-    ${s.allowTime ? sec('time', '⏰', 'Saat', s.time, timeBody) + sec('remind', '🔔', 'Hatırlatıcı', s.remind.map(remindLabel).join(', '), remBody) : ''}
-    ${s.allowRec ? sec('rec', '↻', 'Tekrar', s.rec ? recLabel(s.rec) : '', recBody) : ''}
-    <div class="dp-foot"><button type="button" class="dp-done">Tamam</button></div>`;
-  // Gün seçince pencere kapanır; ancak saat/hatırlatıcı/tekrar bölümü açıksa (ayar yapılıyor) açık kalır
-  datePop.querySelectorAll('[data-iso]').forEach(b => b.onclick = () => commitDate({ due: b.dataset.iso || null }, !s.open));
-  datePop.querySelectorAll('.dp-nav').forEach(b => b.onclick = () => {
-    s.month = new Date(m.getFullYear(), m.getMonth() + Number(b.dataset.m), 1);
+    <div class="dp-body dp-v-${s.view}${enter ? ' enter' : ''}">${body}</div>
+    ${props ? `<div class="dp-props">${props}</div>` : ''}
+    <div class="dp-foot"><span class="dp-sum${s.due ? '' : ' none'}">${esc(sum)}</span><button type="button" class="dp-done">${ico('check')}Tamam</button></div>`;
+
+  // Gün seçince pencere kapanır; kullanıcı saat/hatırlatıcı/tekrar ile uğraşıyorsa açık kalır
+  datePop.querySelectorAll('[data-iso]').forEach(b => b.onclick = () => commitDate({ due: b.dataset.iso || null }, !s.keep));
+  datePop.querySelectorAll('[data-m]').forEach(b => b.onclick = () => {
+    s.month = new Date(s.month.getFullYear(), s.month.getMonth() + Number(b.dataset.m), 1);
     renderDatePop();
   });
-  datePop.querySelectorAll('[data-open]').forEach(b => b.onclick = () => { s.open = s.open === b.dataset.open ? null : b.dataset.open; renderDatePop(); positionDatePop(); });
+  datePop.querySelectorAll('[data-view]').forEach(b => b.onclick = () => {
+    s.view = s.view === b.dataset.view ? 'cal' : b.dataset.view;
+    if (s.view !== 'cal') s.keep = true;
+    renderDatePop();
+    positionDatePop();
+  });
+  datePop.querySelectorAll('[data-clear]').forEach(b => b.onclick = () => {
+    s.keep = true;
+    const k = b.dataset.clear;
+    // Saat kalkınca ona bağlı göreli hatırlatıcılar da kalkar
+    commitDate(k === 'time' ? { time: null, remind: s.remind.filter(t => !isRelRemind(t)) } : k === 'remind' ? { remind: [] } : { rec: null }, false);
+  });
   datePop.querySelectorAll('[data-rec]').forEach(b => b.onclick = () => {
     const rec = b.dataset.rec || null;
     // Tekrar seçilip tarih yoksa bugünden başlasın
     commitDate({ rec, due: rec && !s.due ? todayISO() : s.due }, false);
   });
-  // Saat: önce gün yoksa bugün atanır
-  const tgRoot = datePop.querySelector('.dp-sec-b .tg');
-  if (tgRoot) bindTimeGrid(tgRoot, s.time, (t, done) => commitDate({ time: t, due: s.due || todayISO() }, false));
-  datePop.querySelector('[data-time]')?.addEventListener('click', () => commitDate({ time: null, remind: s.remind.filter(t => !isRelRemind(t)) }, false));
+  // Saat: gün yoksa bugün atanır; seçilince takvime dönülür
+  if (s.view === 'time') {
+    bindTimeList(datePop, s.time, t => { s.view = 'cal'; commitDate({ time: t, due: s.due || todayISO() }, false); });
+    datePop.querySelector('[data-time-none]').onclick = () => { s.view = 'cal'; commitDate({ time: null, remind: s.remind.filter(t => !isRelRemind(t)) }, false); };
+  }
   datePop.querySelectorAll('[data-remind]').forEach(b => b.onclick = () => {
     const t = b.dataset.remind;
     commitDate({ remind: s.remind.includes(t) ? s.remind.filter(x => x !== t) : [...s.remind, t] }, false);
   });
   datePop.querySelector('.dp-radd')?.addEventListener('click', () => {
-    const t = `${datePop.querySelector('.dp-rd').value}T${datePop.querySelector('.dp-rh').value}:${datePop.querySelector('.dp-rm').value}`;
+    const t = `${datePop.querySelector('.dp-rd').value}T${datePop.querySelector('.dp-rt').value}`;
     if (REMIND_RE.test(t) && !s.remind.includes(t)) commitDate({ remind: [...s.remind, t] }, false);
   });
   datePop.querySelector('.dp-done').onclick = closeDatePop;
@@ -322,6 +357,7 @@ function renderDatePop() {
 }
 const WEEKDAY_SHORT = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 const fmtMonthYear = new Intl.DateTimeFormat('tr-TR', { month: 'long', year: 'numeric' });
+const fmtLong = new Intl.DateTimeFormat('tr-TR', { weekday: 'long', day: 'numeric', month: 'long' });
 document.addEventListener('mousedown', e => {
   if (datePopState && !e.target.closest('#datePop') && !datePopState.anchor.contains(e.target)) closeDatePop();
 });

@@ -11,6 +11,23 @@ const CLOCK_ICONS = {
   analog: '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
 };
 
+// Saniyeli dijital görünüm: gerçek bir LCD saat gibi yedi parçalı (7 segment) rakamlar; sönük parçalar silik görünür, iki nokta saniyede bir yanıp söner
+const LCD_SEGS = {   // her rakamın yanan parçaları (a üst, b sağ üst, c sağ alt, d alt, e sol alt, f sol üst, g orta)
+  0: 'abcdef', 1: 'bc', 2: 'abged', 3: 'abgcd', 4: 'fgbc', 5: 'afgcd', 6: 'afgedc', 7: 'abc', 8: 'abcdefg', 9: 'abcdfg',
+};
+const LCD_POLY = {
+  a: '16,10 21,5 43,5 48,10 43,15 21,15', g: '16,54 21,49 43,49 48,54 43,59 21,59', d: '16,98 21,93 43,93 48,98 43,103 21,103',
+  f: '8,15 13,20 13,46 8,51 3,46 3,20', b: '56,15 61,20 61,46 56,51 51,46 51,20',
+  e: '8,57 13,62 13,88 8,93 3,88 3,62', c: '56,57 61,62 61,88 56,93 51,88 51,62',
+};
+const lcdDigit = n => `<svg class="lcd-d" viewBox="0 0 64 104" aria-hidden="true">${Object.entries(LCD_POLY).map(([k, pts]) => `<polygon class="${LCD_SEGS[n].includes(k) ? 'on' : 'off'}" points="${pts}"/>`).join('')}</svg>`;
+const lcdColon = on => `<svg class="lcd-c${on ? ' on' : ''}" viewBox="0 0 16 104" aria-hidden="true"><rect x="3" y="30" width="10" height="10" rx="2"/><rect x="3" y="64" width="10" height="10" rx="2"/></svg>`;
+function lcdHtml(h, m, s) {
+  const d = String(h).padStart(2, '0') + String(m).padStart(2, '0') + String(s).padStart(2, '0');
+  const on = s % 2 === 0;
+  return lcdDigit(d[0]) + lcdDigit(d[1]) + lcdColon(on) + lcdDigit(d[2]) + lcdDigit(d[3]) + lcdColon(on) + lcdDigit(d[4]) + lcdDigit(d[5]);
+}
+
 // Analog kadran: 60 çizgi (saat başları kalın), 12/3/6/9 rakamları, akrep-yelkovan-saniye
 function buildAnalog() {
   const ticks = Array.from({ length: 60 }, (_, i) => {
@@ -44,6 +61,7 @@ function tickClock() {
   const p = n => String(n).padStart(2, '0');
   const mode = clockMode();
   $('#time').textContent = `${p(now.getHours())}:${p(now.getMinutes())}${mode === 'seconds' ? `:${p(now.getSeconds())}` : ''}`;
+  if (mode === 'seconds') $('#lcd').innerHTML = lcdHtml(now.getHours(), now.getMinutes(), now.getSeconds());
   if (mode === 'analog') {
     if (!$('#hHand')) buildAnalog();
     const s = now.getSeconds(), m = now.getMinutes() + s / 60, h = (now.getHours() % 12) + m / 60;
