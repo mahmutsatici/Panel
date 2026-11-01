@@ -505,12 +505,12 @@ kbd { background: var(--card-2); border: 1px solid var(--line); border-radius: 5
 }
 .date-pop[hidden] { display: none; }
 .dp-quick { display: flex; flex-wrap: wrap; gap: 5px; }
-.dp-quick button, .dp-rec button {
+.dp-quick button, .dp-rec button, .dp-time button, .dp-remind button {
   border: 1px solid var(--line); background: var(--card-2); border-radius: 99px;
   padding: 2px 9px; font-size: var(--fs-meta); font-weight: 500;
 }
-.dp-quick button:hover, .dp-rec button:hover { border-color: var(--accent); }
-.dp-quick button.on, .dp-rec button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.dp-quick button:hover, .dp-rec button:hover, .dp-time button:hover, .dp-remind button:hover:not(:disabled) { border-color: var(--accent); }
+.dp-quick button.on, .dp-rec button.on, .dp-remind button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .dp-quick button.none { color: var(--muted); }
 .dp-quick button.none.on { background: var(--card-3); border-color: var(--card-3); color: var(--text); }
 .dp-text {
@@ -940,3 +940,17 @@ body.solo .stats .st-side .st-kv:nth-child(2) { display: none; }   /* açık/gec
 .members .mem-msg { color: var(--load-3); min-height: 1em; }
 .settings .adm-name { flex: 1; min-width: 0; }
 .adm-use { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; font-size: var(--fs-sub); }
+
+/* Saat ve hatırlatıcı (tarih penceresi) */
+.dp-time, .dp-remind { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border-top: 1px solid var(--line); padding-top: 8px; }
+.dp-time .muted, .dp-remind .muted { font-size: var(--fs-meta); margin-right: 2px; }
+.dp-time input[type="time"], .dp-remind-add input {
+  background: var(--card-2); color: var(--text); border: 1px solid var(--line); border-radius: 9px; outline: none;
+  padding: 2px 6px; font-size: var(--fs-meta); color-scheme: dark;
+}
+[data-theme="light"] .dp-time input, [data-theme="light"] .dp-remind-add input, [data-theme="cream"] .dp-time input, [data-theme="cream"] .dp-remind-add input { color-scheme: light; }
+.dp-time input[type="time"]:focus, .dp-remind-add input:focus { border-color: var(--accent); }
+.dp-time input:disabled { opacity: .45; }
+.dp-remind button:disabled { opacity: .4; cursor: default; }
+.dp-remind-add { display: flex; gap: 4px; align-items: center; width: 100%; }
+.due .bell, .due-btn .bell { margin-left: 4px; font-size: .9em; }

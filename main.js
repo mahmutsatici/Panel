@@ -257,7 +257,7 @@ function dueSummary(md) {
     if (!t || catDeleted || /<!--\s*silindi/i.test(t[1])) continue;
     const due = (t[1].match(/📅\s*(\d{4}-\d{2}-\d{2})/u) || [])[1];
     if (!due || due > today) continue;
-    const text = t[1].replace(/\s*🔁[^📅<]*/u, '').replace(/\s*📅\s*\S+/u, '').replace(/\s*<!--.*?-->/g, '').replace(/[*_`~]/g, '').trim();
+    const text = t[1].replace(/\s*🔁[^📅<]*/u, '').replace(/\s*📅\s*\S+/u, '').replace(/\s*⏰\s*\S+/u, '').replace(/\s*🔔[^<]*/u, '').replace(/\s*<!--.*?-->/g, '').replace(/[*_`~]/g, '').trim();
     (due === today ? todayTasks : overdue).push(text);
   }
   return { todayTasks, overdue };
@@ -703,6 +703,14 @@ function registerIpc() {
     return withRuntime(await writeSettings(c => ({ notify: { ...c.notify, ...patch } })));
   });
   ipcMain.handle('notify:test', () => sendDailySummary());
+  // Görev hatırlatıcısı: arayüz zamanı gelince bildirimi buradan gösterir (tıklayınca pencere açılır)
+  ipcMain.handle('notify:show', (_e, { title, body }) => {
+    if (!Notification.isSupported()) return false;
+    const n = new Notification({ title: String(title).slice(0, 200), body: String(body).slice(0, 400), icon: ICON });
+    n.on('click', () => { if (win) { win.show(); win.focus(); } });
+    n.show();
+    return true;
+  });
   ipcMain.handle('backup:config', async (_e, patch) => {
     const next = await writeSettings(c => ({ backup: { ...c.backup, ...patch } }));
     if (next.backup.enabled && next.backup.dir && next.backup.lastDate !== todayISO()) return withRuntime(await backupNow());

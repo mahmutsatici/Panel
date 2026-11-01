@@ -10,7 +10,7 @@
 // · Alt görev = 2 boşluk girintili madde (en fazla 3 seviye):
 //   - [ ] analiz yapılacak
 //     - [ ] masraf analizi
-// · "📅 YYYY-AA-GG" son tarihtir (Obsidian Tasks ile aynı biçim).
+// · "📅 YYYY-AA-GG" son tarihtir (Obsidian Tasks ile aynı biçim); "⏰ SS:DD" görevin saati; "🔔 0dk,15dk,2026-11-05T09:00" hatırlatıcılar.
 // · <!-- eklendi:… tamamlandı:… --> arka planda tutulan zaman bilgisidir; Markdown'da görünmez.
 // · Silme = pasif yapma. Satır kalır, sonuna <!-- silindi: … --> eklenir; bu işaret silinince geri gelir.
 //   Kategori silinirse başlığına eklenir: ## Eski kategori <!-- silindi: … -->
@@ -19,6 +19,8 @@ const DEL_RE = /\s*<!--\s*silindi\b[^>]*-->\s*$/i;
 const DEL_AT_RE = /<!--\s*silindi:?\s*([^>]*?)\s*-->/i;
 const META_RE = /\s*<!--\s*((?:eklendi|tamamlandı):[^>]*?)\s*-->/u;
 const DUE_RE = /\s*📅\s*(\d{4}-\d{2}-\d{2})/u;
+const TIME_RE = /\s*⏰\s*(\d{1,2}:\d{2})/u;
+const REMIND_LINE_RE = /\s*🔔\s*([^⏰📅🔁<]*?)\s*(?=⏰|📅|🔁|<!--|$)/u;
 const REC_RE = /\s*🔁\s*([^📅<]*?)\s*(?=📅|<!--|$)/u;
 const deletedMark = () => `<!-- silindi: ${new Date().toLocaleString('sv-SE').slice(0, 16)} -->`;
 const GENERAL = 'Genel';
@@ -104,6 +106,14 @@ function parseTaskBody(body) {
   }
   const due = body.match(DUE_RE);
   if (due) { task.due = due[1]; body = body.replace(DUE_RE, ''); }
+  const time = body.match(TIME_RE);
+  if (time) { task.time = time[1].padStart(5, '0'); body = body.replace(TIME_RE, ''); }
+  const remind = body.match(REMIND_LINE_RE);
+  if (remind) {
+    const toks = remind[1].split(',').map(s => s.trim()).filter(t => REMIND_RE.test(t));
+    if (toks.length) task.remind = toks;
+    body = body.replace(REMIND_LINE_RE, '');
+  }
   const rec = body.match(REC_RE);
   if (rec && normalizeRec(rec[1])) { task.rec = normalizeRec(rec[1]); body = body.replace(REC_RE, ''); }
   task.text = body.trim();
@@ -119,6 +129,8 @@ function taskLine(t) {
   let s = `- [${t.done ? 'x' : ' '}] ${t.text}`;
   if (t.rec) s += ` 🔁 ${t.rec}`;
   if (t.due) s += ` 📅 ${t.due}`;
+  if (t.time) s += ` ⏰ ${t.time}`;
+  if (t.remind?.length) s += ` 🔔 ${t.remind.join(',')}`;
   const meta = [];
   if (t.created) meta.push(`eklendi:${t.created}`);
   if (t.done && t.completed) meta.push(`tamamlandı:${t.completed}`);
@@ -214,7 +226,8 @@ function setDone(cat, task, done) {
   // tamamlanan kopya tekrar bilgisini bırakır (geri alınıp yeniden işaretlenirse çift oluşmasın)
   if (done && task.rec) {
     const copy = block.map(t => ({ done: false, text: t.text, ...(t.level ? { level: t.level } : {}), created: now }));
-    Object.assign(copy[0], { rec: task.rec, due: nextRecDate(task.rec, task.due) });
+    const rel = (task.remind || []).filter(isRelRemind);   // sabit tarihli hatırlatıcılar tekrara geçmez
+    Object.assign(copy[0], { rec: task.rec, due: nextRecDate(task.rec, task.due), ...(task.time ? { time: task.time } : {}), ...(rel.length ? { remind: rel } : {}) });
     delete task.rec;
     reinsert(cat, copy, parent);
   }
@@ -225,9 +238,11 @@ function setDue(task, iso) {
   task.due = iso || undefined;
   return saveTodos();
 }
-function setDueRec(task, { due, rec }) {
+function setDueRec(task, { due, rec, time, remind }) {
   task.due = due || undefined;
   task.rec = rec || undefined;
+  task.time = due && time ? time : undefined;
+  task.remind = remind?.length ? remind : undefined;
   return saveTodos();
 }
 const allTasks = () => activeCats().flatMap(cat => cat.tasks.map(task => ({ cat, task })));
@@ -272,10 +287,12 @@ function taskTitle(task) {
 }
 function dueButtonHtml(task) {
   const rec = task.rec ? `<span class="rec" title="${esc(recLabel(task.rec))}">↻</span>` : '';
-  if (!task.due) return `<button class="due ${task.rec ? 'future' : 'none'}" title="Son tarih ekle">${rec || '📅'}</button>`;
+  const bell = task.remind?.length ? `<span class="bell" title="${esc('Hatırlat: ' + task.remind.map(remindLabel).join(', '))}">🔔</span>` : '';
+  if (!task.due) return `<button class="due ${task.rec || bell ? 'future' : 'none'}" title="Son tarih ekle">${rec}${bell || (rec ? '' : '📅')}</button>`;
   const d = dueInfo(task.due, task.done);
   const recTip = task.rec ? `\nTekrar: ${recLabel(task.rec)}` : '';
-  return `<button class="due ${d.cls}" title="${d.title}${recTip}\n(değiştirmek için tıkla)">${rec}${d.label}</button>`;
+  const timeTip = task.time ? `\nSaat: ${task.time}` : '';
+  return `<button class="due ${d.cls}" title="${d.title}${timeTip}${recTip}\n(değiştirmek için tıkla)">${rec}${d.label}${task.time ? ' ' + task.time : ''}${bell}</button>`;
 }
 
 const folded = new WeakSet();   // alt görevleri gizlenmiş görevler (yalnızca bu oturumda)
@@ -424,7 +441,7 @@ Bu işlem geri alınamaz.`)) return;
         deleteTask(cat, task);
         saveTodos();
       };
-      li.querySelector('.due').onclick = e => pickDate(e.currentTarget, { due: task.due, rec: task.rec }, v => setDueRec(task, v));
+      li.querySelector('.due').onclick = e => pickDate(e.currentTarget, { due: task.due, rec: task.rec, time: task.time, remind: task.remind, allowTime: !cat.shared }, v => setDueRec(task, v));
       // Metne tıklayınca düzenleme modu (metindeki bağlantıya tıklamak bağlantıyı açar)
       li.querySelector('.txt').onclick = e => { if (!e.target.closest('a')) editTask(li, task, cat); };
 
@@ -532,12 +549,14 @@ function editTask(li, task, cat) {
     // Metin değişmediyse doğal dil çözümlemesi yapma (ör. "Pazar alışverişi" kendiliğinden tarihlenmesin)
     const nl = parsed.text !== task.text ? parseNatural(parsed.text) : { text: parsed.text };
     const text = nl.text || parsed.text;
-    const due = parsed.due || nl.due, rec = parsed.rec || nl.rec;
-    const changed = ok && text && (text !== task.text || due || rec);
+    const due = parsed.due || nl.due, rec = parsed.rec || nl.rec, time = parsed.time || nl.time;
+    const changed = ok && text && (text !== task.text || due || rec || time);
     if (changed) {
       task.text = text;
       if (due) task.due = due;
       if (rec) task.rec = rec;
+      if (time && !cat.shared) { task.time = time; if (!task.due) task.due = todayISO(); }
+      if (parsed.remind && !cat.shared) task.remind = [...new Set([...(task.remind || []), ...parsed.remind])];
     }
     // Tab / Shift+Tab: görevi bir önceki görevin alt görevi yap / bir seviye çıkar
     const moved = ok && indent && !cat.shared && indentTask(cat, task, indent);
@@ -560,7 +579,7 @@ function editTask(li, task, cat) {
 function startNewTask(cat, after = null, level = 0) {
   if (collapsed.delete(cat.name)) store.set('collapsedCats', [...collapsed]);
   selectCat(cat.name);
-  pendingNew = { cat, after, level: after ? level : 0, due: todayISO(), rec: null, text: '', manual: false };
+  pendingNew = { cat, after, level: after ? level : 0, due: todayISO(), rec: null, time: null, remind: [], text: '', manual: false };
   pendingFocus = true;
   renderTodos();
 }
@@ -588,19 +607,20 @@ function buildNewTaskRow() {
   // Tarih düğmesi: yazılan metinden algılanan tarih/tekrar varsa onu, yoksa seçileni gösterir
   const effective = () => {
     const nl = p.manual ? {} : parseNatural(input.value);
-    return { due: nl.due || p.due, rec: nl.rec || p.rec, fromText: !!(nl.due || nl.rec) };
+    const time = (p.cat.shared ? null : nl.time) || p.time;
+    return { due: nl.due || (time && !p.due ? todayISO() : p.due), rec: nl.rec || p.rec, time, fromText: !!(nl.due || nl.rec || nl.time) };
   };
   const renderDue = () => {
-    const e = effective(), rec = e.rec ? '↻ ' : '';
-    if (e.due) { const d = dueInfo(e.due, false); dueBtn.textContent = `📅 ${rec}${d.label}`; dueBtn.className = `due-btn ${d.cls}`; }
+    const e = effective(), rec = e.rec ? '↻ ' : '', bell = p.remind.length ? ' 🔔' : '';
+    if (e.due) { const d = dueInfo(e.due, false); dueBtn.textContent = `📅 ${rec}${d.label}${e.time ? ' ' + e.time : ''}${bell}`; dueBtn.className = `due-btn ${d.cls}`; }
     else { dueBtn.textContent = `📅 ${rec}Tarihsiz`; dueBtn.className = 'due-btn none'; }
     dueBtn.classList.toggle('nl', e.fromText);
     dueBtn.title = e.fromText ? 'Yazdığın metinden algılandı' : 'Son tarih (değiştirmek için tıkla)';
   };
   renderDue();
   input.addEventListener('input', () => { p.text = input.value; renderDue(); });
-  dueBtn.onclick = () => pickDate(dueBtn, { due: effective().due, rec: effective().rec }, v => {
-    p.due = v.due; p.rec = v.rec; p.manual = true; renderDue(); input.focus();
+  dueBtn.onclick = () => pickDate(dueBtn, { due: effective().due, rec: effective().rec, time: effective().time, remind: p.remind, allowTime: !p.cat.shared }, v => {
+    p.due = v.due; p.rec = v.rec; p.time = v.time; p.remind = v.remind; p.manual = true; renderDue(); input.focus();
   }, () => input.focus());
 
   let finished = false;
@@ -613,11 +633,13 @@ function buildNewTaskRow() {
     if (!text) return cancel();
     finished = true;
     const due = parsed.due || nl.due || p.due, rec = parsed.rec || nl.rec || p.rec;
-    const task = { done: false, text, due: due || undefined, rec: rec || undefined, created: stampNow() };
+    const time = !p.cat.shared && due ? (parsed.time || nl.time || p.time) : null;
+    const remind = !p.cat.shared ? [...new Set([...(parsed.remind || []), ...p.remind])] : [];
+    const task = { done: false, text, due: due || undefined, rec: rec || undefined, ...(time ? { time } : {}), ...(remind.length ? { remind } : {}), created: stampNow() };
     if (p.level) task.level = p.level;
     if (!p.after || p.cat.tasks.indexOf(p.after) === -1) insertTask(p.cat, task);
     else { p.cat.tasks.splice(newTaskIndex(p), 0, task); p.cat.tasks = sortTree(p.cat.tasks); }
-    pendingNew = chain ? { cat: p.cat, after: p.cat.shared ? null : task, level: p.cat.shared ? 0 : p.level, due: todayISO(), rec: null, text: '', manual: false } : null;
+    pendingNew = chain ? { cat: p.cat, after: p.cat.shared ? null : task, level: p.cat.shared ? 0 : p.level, due: todayISO(), rec: null, time: null, remind: [], text: '', manual: false } : null;
     pendingFocus = chain;
     saveTodos();
   };

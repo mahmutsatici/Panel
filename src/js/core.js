@@ -124,6 +124,9 @@ function explicitDate(day, month, year) {
   return isoOf(d);
 }
 const NL_REC_RE = '(her (?:\\d+ )?(?:gün|hafta|ay|yıl)|hafta ?içi|her iş günü)';
+// "15:30", "saat 15:30", "saat 9", "15:30'da" → "HH:MM"
+const NL_TIME_RE = `(?:saat ?)?(\\d{1,2}):(\\d{2})${SFX}|saat ?(\\d{1,2})${SFX}`;
+const toTime = (h, m = '0') => (+h < 24 && +m < 60 ? `${String(+h).padStart(2, '0')}:${String(+m).padStart(2, '0')}` : null);
 
 // Metnin başında/sonunda bir ifade ara; bulunursa { value, text: ifade çıkarılmış metin }
 function takePhrase(text, pattern, convert) {
@@ -139,14 +142,35 @@ function takePhrase(text, pattern, convert) {
   return null;
 }
 function parseNatural(input) {
-  let text = input.trim(), due = null, rec = null;
+  let text = input.trim(), due = null, rec = null, time = null;
   const r = takePhrase(text, NL_REC_RE, s => normalizeRec(s.replace('haftaiçi', 'hafta içi')));
   if (r) { rec = r.value; text = r.text; }
+  const tm = takePhrase(text, NL_TIME_RE, (h1, m1, h2) => toTime(h1 ?? h2, m1));
+  if (tm) { time = tm.value; text = tm.text; }
   for (const [pattern, fn] of NL_DATE_RULES) {
     const d = takePhrase(text, pattern, fn);
     if (d) { due = d.value; text = d.text; break; }
   }
-  return { text, due, rec };
+  return { text, due, rec, time };
+}
+
+// ============ Hatırlatıcılar (biçim) ============
+// Görevin hatırlatıcıları (task.remind) metin parçalarıdır: "15dk" = görev saatinden 15 dakika önce ("0dk" = tam saatinde),
+// "2026-11-05T09:00" = o anda. Dosyada "🔔 0dk,15dk" biçiminde yazılır.
+const REMIND_RE = /^(?:\d+dk|\d{4}-\d{2}-\d{2}T\d{2}:\d{2})$/;
+const isRelRemind = tok => tok.endsWith('dk');
+const REMIND_PRESETS = [[0, 'Saatinde'], [15, '15 dk önce'], [60, '1 sa önce'], [1440, '1 gün önce']];
+function remindLabel(tok) {
+  if (!isRelRemind(tok)) { const d = new Date(tok); return isNaN(d) ? tok : `${fmtDayMonth.format(d)} ${tok.slice(11)}`; }
+  const n = parseInt(tok, 10);
+  if (!n) return 'Saatinde';
+  return n % 1440 === 0 ? `${n / 1440} gün önce` : n % 60 === 0 ? `${n / 60} sa önce` : `${n} dk önce`;
+}
+// Hatırlatıcının çalacağı an (Date); göreli olup görevin günü/saati yoksa null
+function remindAt(task, tok) {
+  if (!isRelRemind(tok)) return new Date(tok);
+  if (!task.due || !task.time) return null;
+  return new Date(parseISODate(task.due).getTime() + (+task.time.slice(0, 2) * 60 + +task.time.slice(3)) * 6e4 - parseInt(tok, 10) * 6e4);
 }
 
 // ============ Tarih penceresi ============
@@ -154,9 +178,9 @@ function parseNatural(input) {
 // küçük ay görünümü ve tekrar seçenekleri. onChange({ due, rec }) ile bildirir.
 const datePop = document.getElementById('datePop');
 let datePopState = null;
-function pickDate(anchor, { due = null, rec = null, allowRec = true } = {}, onChange, onClose) {
+function pickDate(anchor, { due = null, rec = null, time = null, remind = [], allowRec = true, allowTime = true } = {}, onChange, onClose) {
   const base = due || todayISO();
-  datePopState = { anchor, due, rec, allowRec, onChange, onClose, month: new Date(parseISODate(base).getFullYear(), parseISODate(base).getMonth(), 1) };
+  datePopState = { anchor, due, rec, time, remind: [...remind], allowRec, allowTime, onChange, onClose, month: new Date(parseISODate(base).getFullYear(), parseISODate(base).getMonth(), 1) };
   renderDatePop();
   datePop.hidden = false;
   positionDatePop();
@@ -176,8 +200,10 @@ function positionDatePop() {
   datePop.style.top = `${Math.max(8, Math.min(top, innerHeight - h - 8))}px`;   // her durumda ekranda kalsın
 }
 function commitDate(patch, close) {
-  Object.assign(datePopState, patch);
-  datePopState.onChange({ due: datePopState.due, rec: datePopState.rec });
+  const s = datePopState;
+  Object.assign(s, patch);
+  if (!s.due) { s.time = null; s.remind = s.remind.filter(t => !isRelRemind(t)); }   // saat ve göreli hatırlatıcı bir güne bağlıdır
+  s.onChange({ due: s.due, rec: s.rec, time: s.time, remind: s.remind });
   // Liste yeniden çizilince bağlı düğme yok olabilir; o zaman pencere olduğu yerde kalsın
   if (close) closeDatePop(); else { renderDatePop(); if (datePopState.anchor.isConnected) positionDatePop(); }
 }
@@ -211,6 +237,15 @@ function renderDatePop() {
       <button type="button" data-rec="" class="${s.rec ? '' : 'on'}">Yok</button>
       ${REC_PRESETS.map(([k, l]) => `<button type="button" data-rec="${k}" class="${s.rec === k ? 'on' : ''}">${l}</button>`).join('')}
       ${s.rec && !REC_PRESETS.some(([k]) => k === s.rec) ? `<button type="button" data-rec="${esc(s.rec)}" class="on">${esc(recLabel(s.rec))}</button>` : ''}
+    </div>` : ''}
+    ${s.allowTime ? `<div class="dp-time"><span class="muted">⏰ Saat</span>
+      <input type="time" class="dp-time-in" value="${s.time || ''}" ${s.due ? '' : 'disabled'} title="${s.due ? '' : 'Önce bir gün seç'}">
+      ${s.time ? '<button type="button" data-time="">Saati kaldır</button>' : ''}
+    </div>
+    <div class="dp-remind"><span class="muted">🔔 Hatırlat</span>
+      ${REMIND_PRESETS.map(([n, l]) => `<button type="button" data-remind="${n}dk" class="${s.remind.includes(n + 'dk') ? 'on' : ''}" ${s.time ? '' : 'disabled title="Önce saat seç"'}>${l}</button>`).join('')}
+      ${s.remind.filter(t => !REMIND_PRESETS.some(([n]) => n + 'dk' === t)).map(t => `<button type="button" data-remind="${t}" class="on" title="Kaldır">${esc(remindLabel(t))} ✕</button>`).join('')}
+      <span class="dp-remind-add"><input type="date" class="dp-rd" value="${s.due || todayISO()}"><input type="time" class="dp-rt" value="09:00"><button type="button" class="dp-radd">Ekle</button></span>
     </div>` : ''}`;
   datePop.querySelectorAll('[data-iso]').forEach(b => b.onclick = () => commitDate({ due: b.dataset.iso || null }, true));
   datePop.querySelectorAll('.dp-nav').forEach(b => b.onclick = () => {
@@ -222,13 +257,24 @@ function renderDatePop() {
     // Tekrar seçilip tarih yoksa bugünden başlasın
     commitDate({ rec, due: rec && !s.due ? todayISO() : s.due }, false);
   });
+  datePop.querySelector('.dp-time-in')?.addEventListener('change', e => commitDate({ time: e.target.value || null }, false));
+  datePop.querySelector('[data-time]')?.addEventListener('click', () => commitDate({ time: null, remind: s.remind.filter(t => !isRelRemind(t)) }, false));
+  datePop.querySelectorAll('[data-remind]').forEach(b => b.onclick = () => {
+    const t = b.dataset.remind;
+    commitDate({ remind: s.remind.includes(t) ? s.remind.filter(x => x !== t) : [...s.remind, t] }, false);
+  });
+  datePop.querySelector('.dp-radd')?.addEventListener('click', () => {
+    const t = `${datePop.querySelector('.dp-rd').value}T${datePop.querySelector('.dp-rt').value}`;
+    if (REMIND_RE.test(t) && !s.remind.includes(t)) commitDate({ remind: [...s.remind, t] }, false);
+  });
   const input = datePop.querySelector('.dp-text');
   input.onkeydown = e => {
     if (e.key !== 'Enter') return;
     e.preventDefault();
     // "x" ön ekiyle çözümle (takePhrase boş metin kabul etmediği için)
     const p = parseNatural(`x ${input.value}`);
-    if (p.due || p.rec) commitDate({ due: p.due || s.due || (p.rec ? todayISO() : null), rec: p.rec || s.rec }, !p.rec);
+    if (p.time && s.allowTime && !p.due && !s.due) p.due = todayISO();   // yalnızca saat yazıldıysa bugün
+    if (p.due || p.rec) commitDate({ due: p.due || s.due || (p.rec ? todayISO() : null), rec: p.rec || s.rec, ...(p.time && s.allowTime ? { time: p.time } : {}) }, !p.rec);
     else { input.classList.add('bad'); setTimeout(() => input.classList.remove('bad'), 600); }
   };
 }

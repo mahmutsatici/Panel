@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('panel', {
   notify: {
     config: patch => call('notify:config', patch),
     test: () => call('notify:test'),
+    show: (title, body) => call('notify:show', { title, body }),
   },
   backup: {
     config: patch => call('backup:config', patch),
