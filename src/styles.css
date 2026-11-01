@@ -304,9 +304,13 @@ select option { background: var(--card); }
 .cat-input { padding: 3px 8px; font-size: var(--fs-sub); flex: 1; }
 .cat ul { list-style: none; margin: 0; padding: 0; }
 .cat li {
-  display: flex; align-items: flex-start; gap: 10px;
+  display: flex; align-items: flex-start; gap: 10px; position: relative;
   padding: 6px 8px; border-radius: 8px;
+  margin-left: calc(var(--lvl, 0) * 22px);   /* alt görev girintisi */
 }
+.cat li .fold { position: absolute; left: -9px; top: 6px; width: 16px; height: 20px; padding: 0; border: 0; background: none; color: var(--muted); font-size: 11px; cursor: pointer; opacity: 0; }
+.cat li:hover .fold, .cat li .fold:focus-visible { opacity: 1; }
+.cat li .sub-cnt { flex: none; margin-top: 1px; font-size: var(--fs-meta); color: var(--muted); background: var(--card-2); border-radius: 99px; padding: 0 7px; }
 .cat li:hover { background: var(--card-2); }
 .cat li[draggable="true"] { cursor: grab; }
 .cat li .txt { cursor: text; }

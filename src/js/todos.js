@@ -7,6 +7,9 @@
 //   ## Ev
 //   ...
 // · Dosyadaki sıra = ekrandaki sıra (yapılmamışlar üstte, yapılmışlar altta). Sürükle-bırak ile değişir.
+// · Alt görev = 2 boşluk girintili madde (en fazla 3 seviye):
+//   - [ ] analiz yapılacak
+//     - [ ] masraf analizi
 // · "📅 YYYY-AA-GG" son tarihtir (Obsidian Tasks ile aynı biçim).
 // · <!-- eklendi:… tamamlandı:… --> arka planda tutulan zaman bilgisidir; Markdown'da görünmez.
 // · Silme = pasif yapma. Satır kalır, sonuna <!-- silindi: … --> eklenir; bu işaret silinince geri gelir.
@@ -43,6 +46,52 @@ const sharedTitle = cat => `Ortak kategori · ${cat.uyeler.map(e => cat.uyeAdlar
 
 const partition = tasks => [...tasks.filter(t => !t.done), ...tasks.filter(t => t.done)];
 
+// ---- Alt görevler (ağaç) ----
+// Kategorinin görevleri düz listede durur; her görevin level'ı (0–2) vardır. Bir görevin alt görevleri, kendisinden sonra
+// gelen ve daha derin seviyedeki ardışık görevlerdir ("blok"). Ortak kategorilerde level yoktur (hepsi 0).
+const MAX_LEVEL = 2;
+const lvl = t => t.level || 0;
+const blockEnd = (tasks, i) => { let j = i + 1; while (j < tasks.length && lvl(tasks[j]) > lvl(tasks[i])) j++; return j; };
+const parentOf = (tasks, i) => { for (let j = i - 1; j >= 0; j--) if (lvl(tasks[j]) < lvl(tasks[i])) return tasks[j]; return null; };
+const blockOf = (cat, task) => { const i = cat.tasks.indexOf(task); return cat.tasks.slice(i, blockEnd(cat.tasks, i)); };
+// Seviyeleri geçerli kıl: ilk görev 0, her görev en fazla bir öncekinin bir altı
+function fixLevels(tasks) {
+  let prev = -1;
+  for (const t of tasks) {
+    const l = Math.max(0, Math.min(lvl(t), prev + 1, MAX_LEVEL));
+    if (l) t.level = l; else delete t.level;
+    prev = l;
+  }
+  return tasks;
+}
+// Kategori görevlerini sırala: her seviyede kardeşler arasında yapılmamışlar üstte, yapılmışlar altta; alt görevler üstüyle birlikte kalır
+function sortTree(tasks) {
+  const sort = list => {
+    const blocks = [];
+    for (let i = 0; i < list.length;) {
+      const e = blockEnd(list, i);
+      blocks.push([list[i], ...sort(list.slice(i + 1, e))]);
+      i = e;
+    }
+    return [...blocks.filter(b => !b[0].done), ...blocks.filter(b => b[0].done)].flat();
+  };
+  return sort(fixLevels(tasks));
+}
+// Bloğu üst görevinin (parent; null = kategori) altına koy: yapılmamış → en üste, yapılmış → yapılmışların en üstüne
+function reinsert(cat, block, parent) {
+  const t = cat.tasks, L = lvl(block[0]);
+  const pi = parent ? t.indexOf(parent) : -1;
+  const start = pi + 1, end = parent ? blockEnd(t, pi) : t.length;
+  let at = block[0].done ? end : start;
+  if (block[0].done) for (let j = start; j < end; j++) if (lvl(t[j]) === L && t[j].done) { at = j; break; }
+  t.splice(at, 0, ...block);
+}
+// Bloğun seviyesini kaydır (kök görev "level" olsun); alt görevler göreli olarak taşınır
+function setBlockLevel(block, level) {
+  const shift = level - lvl(block[0]);
+  for (const t of block) { const l = Math.max(0, Math.min(MAX_LEVEL, lvl(t) + shift)); if (l) t.level = l; else delete t.level; }
+}
+
 // "- [ ] …" satırının gövdesinden metin, son tarih ve zaman bilgisini ayır
 function parseTaskBody(body) {
   const task = { text: body };
@@ -62,7 +111,9 @@ function parseTaskBody(body) {
 }
 function parseTaskLine(line) {
   const t = line.match(TASK_RE);
-  return t ? { done: t[1] !== ' ', ...parseTaskBody(t[2]) } : null;
+  if (!t) return null;
+  const level = Math.min(MAX_LEVEL, Math.floor(line.match(/^\s*/)[0].replace(/	/g, '  ').length / 2));
+  return { done: t[1] !== ' ', ...(level ? { level } : {}), ...parseTaskBody(t[2]) };
 }
 function taskLine(t) {
   let s = `- [${t.done ? 'x' : ' '}] ${t.text}`;
@@ -104,7 +155,7 @@ function parseTodos(text) {
     if (g) { g.tasks.unshift(...loose.tasks); g.hidden.push(...loose.hidden); } else cats.unshift(loose);
   }
   if (!cats.some(c => !c.deleted)) cats.unshift(newCat(GENERAL));
-  for (const c of cats) if (!c.deleted) c.tasks = partition(c.tasks);
+  for (const c of cats) if (!c.deleted) c.tasks = sortTree(c.tasks);
   return { head: head || '# Yapılacaklar', cats };
 }
 
@@ -113,7 +164,7 @@ function serializeTodos() {
   for (const c of todo.cats) {
     if (c.shared) continue;   // ortak kategoriler buluttadır, todo.md'ye yazılmaz
     out.push(c.deleted ? `## ${c.name} ${c.mark}` : `## ${c.name}`);
-    for (const t of c.tasks) out.push(taskLine(t));
+    for (const t of c.tasks) out.push('  '.repeat(lvl(t)) + taskLine(t));
     out.push(...c.hidden, '');
   }
   return out.join('\n');
@@ -133,20 +184,14 @@ async function saveTodos() {
   await api.todos.write(serializeTodos());
 }
 
-function insertTask(cat, task) {
-  // Yapılmamış → en üste; yapılmış → yapılmışların en üstüne.
-  if (!task.done) cat.tasks.unshift(task);
-  else {
-    const i = cat.tasks.findIndex(t => t.done);
-    cat.tasks.splice(i === -1 ? cat.tasks.length : i, 0, task);
-  }
-}
-const removeTask = (cat, task) => cat.tasks.splice(cat.tasks.indexOf(task), 1);
-// Sürüklenen görev: aynı kategoride ya da iki yerel kategori arasında taşınır; ortak kategoriyle yerel arasında kopyalanır
-function moveOrCopy(d, dest) {
-  if (d.cat !== dest && (d.cat.shared || dest.shared)) return copyTask(d.task);
-  removeTask(d.cat, d.task);
-  return d.task;
+// Yapılmamış → en üste; yapılmış → yapılmışların en üstüne (üst seviyede).
+function insertTask(cat, task) { reinsert(cat, [task], null); }
+// Sürüklenen görev (alt görevleriyle birlikte, "blok"): aynı kategoride ya da iki yerel kategori arasında taşınır;
+// ortak kategoriyle yerel arasında yalnızca görevin kendisi kopyalanır
+function takeBlock(d, dest) {
+  if (d.cat !== dest && (d.cat.shared || dest.shared)) return [copyTask(d.task)];
+  const i = d.cat.tasks.indexOf(d.task);
+  return d.cat.tasks.splice(i, blockEnd(d.cat.tasks, i) - i);
 }
 
 function addTask(cat, text, due, rec) {
@@ -155,16 +200,25 @@ function addTask(cat, text, due, rec) {
   return saveTodos();
 }
 function setDone(cat, task, done) {
-  removeTask(cat, task);
-  task.done = done;
-  if (done) task.completed = stampNow(); else delete task.completed;
-  // Tekrarlayan görev tamamlanınca bir sonraki tarihle yeni bir kopyası oluşur;
+  const i = cat.tasks.indexOf(task);
+  const parent = parentOf(cat.tasks, i);
+  const block = cat.tasks.splice(i, blockEnd(cat.tasks, i) - i);
+  const now = stampNow();
+  // Üst görev tamamlanınca alt görevleri de tamamlanır (Todoist gibi); geri alınınca yalnızca kendisi açılır
+  for (const t of done ? block : [task]) {
+    if (!!t.done === done) continue;
+    t.done = done;
+    if (done) t.completed = now; else delete t.completed;
+  }
+  // Tekrarlayan görev tamamlanınca bir sonraki tarihle yeni bir kopyası (alt görevleri açık olarak) oluşur;
   // tamamlanan kopya tekrar bilgisini bırakır (geri alınıp yeniden işaretlenirse çift oluşmasın)
   if (done && task.rec) {
-    insertTask(cat, { done: false, text: task.text, rec: task.rec, due: nextRecDate(task.rec, task.due), created: stampNow() });
+    const copy = block.map(t => ({ done: false, text: t.text, ...(t.level ? { level: t.level } : {}), created: now }));
+    Object.assign(copy[0], { rec: task.rec, due: nextRecDate(task.rec, task.due) });
     delete task.rec;
+    reinsert(cat, copy, parent);
   }
-  insertTask(cat, task);
+  reinsert(cat, block, parent);
   return saveTodos();
 }
 function setDue(task, iso) {
@@ -180,8 +234,9 @@ const allTasks = () => activeCats().flatMap(cat => cat.tasks.map(task => ({ cat,
 
 // --- Pasif yapma / geri getirme ---
 function deleteTask(cat, task) {
-  removeTask(cat, task);
-  if (!cat.shared) cat.hidden.push(`${taskLine(task)} ${deletedMark()}`);   // ortak görev bulutta yumuşak silinir (pushShared)
+  const i = cat.tasks.indexOf(task);
+  const gone = cat.tasks.splice(i, blockEnd(cat.tasks, i) - i);   // alt görevler de birlikte pasif olur
+  if (!cat.shared) cat.hidden.push(...gone.map(t => `${taskLine(t)} ${deletedMark()}`));   // ortak görev bulutta yumuşak silinir (pushShared)
 }
 function deleteCategory(cat) {
   cat.deleted = true;
@@ -197,13 +252,13 @@ function restoreCategory(cat) {
   const same = activeCats().find(c => !c.shared && c.name === cat.name);
   if (same) {
     // Aynı adda aktif bir kategori varsa görevler ona katılır
-    same.tasks = partition([...same.tasks, ...cat.tasks]);
+    same.tasks = sortTree([...same.tasks, ...cat.tasks]);
     same.hidden.push(...cat.hidden);
     todo.cats.splice(todo.cats.indexOf(cat), 1);
   } else {
     cat.deleted = false;
     delete cat.mark;
-    cat.tasks = partition(cat.tasks);
+    cat.tasks = sortTree(cat.tasks);
   }
 }
 
@@ -221,6 +276,20 @@ function dueButtonHtml(task) {
   const d = dueInfo(task.due, task.done);
   const recTip = task.rec ? `\nTekrar: ${recLabel(task.rec)}` : '';
   return `<button class="due ${d.cls}" title="${d.title}${recTip}\n(değiştirmek için tıkla)">${rec}${d.label}</button>`;
+}
+
+const folded = new WeakSet();   // alt görevleri gizlenmiş görevler (yalnızca bu oturumda)
+// Çizilecek görevler: tamamlananlar gizliyse açık alt görevi olan yapılmış görev yine görünür; daraltılmış görevin alt görevleri gizlenir
+function visibleTasks(cat) {
+  const out = [];
+  let hideBelow = -1;
+  cat.tasks.forEach((t, i) => {
+    if (hideBelow >= 0 && lvl(t) > hideBelow) return;
+    hideBelow = folded.has(t) ? lvl(t) : -1;
+    const open = !t.done || cat.tasks.slice(i + 1, blockEnd(cat.tasks, i)).some(x => !x.done);
+    if ((showDone || open) && (!mineOnly || isMine(t))) out.push(t);
+  });
+  return out;
 }
 
 function renderTodos() {
@@ -309,7 +378,9 @@ Bu işlem geri alınamaz.`)) return;
         todo.cats.splice(todo.cats.indexOf(cat) + (before ? 0 : 1), 0, d.cat);
       } else if (d.type === 'task') {
         if (d.cat === cat && cat.shared) return endDrag();   // ortak kategoride sıra oluşturma tarihine göre
-        insertTask(cat, moveOrCopy(d, cat));
+        const block = takeBlock(d, cat);
+        setBlockLevel(block, 0);
+        reinsert(cat, block, null);
         collapsed.delete(cat.name);
       } else return;
       endDrag();
@@ -317,29 +388,45 @@ Bu işlem geri alınamaz.`)) return;
     });
 
     const ul = sec.querySelector('ul');
-    const tasks = cat.tasks.filter(t => (showDone || !t.done) && (!mineOnly || isMine(t)));
+    const tasks = visibleTasks(cat);
     // Kategorideki "+" ile açılan boş görev satırı en üstte durur
     const newHere = pendingNew && pendingNew.cat === cat;
     if (newHere && !pendingNew.after) ul.append(buildNewTaskRow());
+    // Görevdeki "+" / alt görev "+" ile açılan satır, eklenecek konumdan önceki son görünür görevin altında durur
+    const newAnchor = newHere && pendingNew.after ? tasks.filter(t => cat.tasks.indexOf(t) < newTaskIndex(pendingNew)).pop() : null;
     for (const task of tasks) {
+      const ti = cat.tasks.indexOf(task), subs = cat.tasks.slice(ti + 1, blockEnd(cat.tasks, ti));
       const li = document.createElement('li');
-      li.className = task.done ? 'done' : '';
+      li.className = (task.done ? 'done' : '') + (lvl(task) ? ' sub' : '');
+      li.style.setProperty('--lvl', lvl(task));
       li.draggable = true;
-      li.innerHTML = `<input type="checkbox" ${task.done ? 'checked' : ''}>`
+      li.innerHTML = (subs.length ? `<button class="fold" title="Alt görevleri göster/gizle">${folded.has(task) ? '▸' : '▾'}</button>` : '')
+        + `<input type="checkbox" ${task.done ? 'checked' : ''}>`
         + `<span class="txt" title="${esc(taskTitle(task))}">${renderInline(task.text)}</span>`
+        + (subs.length ? `<span class="sub-cnt" title="Tamamlanan alt görev">${subs.filter(t => t.done).length}/${subs.length}</span>` : '')
         + (cat.shared ? assigneeButtonHtml(cat, task) : '')
         + dueButtonHtml(task)
         + (cat.shared ? '' : '<button class="row-add" title="Altına görev ekle">＋</button>')
+        + (cat.shared || lvl(task) >= MAX_LEVEL ? '' : '<button class="row-add sub-add" title="Alt görev ekle">⤷</button>')
         + '<button class="del" title="Sil">✕</button>';
+      const fold = li.querySelector('.fold');
+      if (fold) fold.onclick = () => { folded.has(task) ? folded.delete(task) : folded.add(task); renderTodos(); };
       li.querySelector('input').onchange = e => setDone(cat, task, e.target.checked);
       const asg = li.querySelector('.asg');
       if (asg) asg.onclick = e => pickAssignee(e.currentTarget, cat, task);
-      const rowAdd = li.querySelector('.row-add');
-      if (rowAdd) rowAdd.onclick = () => startNewTask(cat, task);
-      li.querySelector('.del').onclick = () => { deleteTask(cat, task); saveTodos(); };
+      const rowAdd = li.querySelector('.row-add:not(.sub-add)'), subAdd = li.querySelector('.sub-add');
+      if (rowAdd) rowAdd.onclick = () => startNewTask(cat, task, lvl(task));
+      if (subAdd) subAdd.onclick = () => { folded.delete(task); startNewTask(cat, task, lvl(task) + 1); };
+      li.querySelector('.del').onclick = () => {
+        if (subs.length && !confirm(`Bu görevle birlikte ${subs.length} alt görev de silinsin mi?
+
+(Silinenler penceresinden geri getirebilirsin.)`)) return;
+        deleteTask(cat, task);
+        saveTodos();
+      };
       li.querySelector('.due').onclick = e => pickDate(e.currentTarget, { due: task.due, rec: task.rec }, v => setDueRec(task, v));
       // Metne tıklayınca düzenleme modu (metindeki bağlantıya tıklamak bağlantıyı açar)
-      li.querySelector('.txt').onclick = e => { if (!e.target.closest('a')) editTask(li, task); };
+      li.querySelector('.txt').onclick = e => { if (!e.target.closest('a')) editTask(li, task, cat); };
 
       // --- Görev sürükleme: aynı kategoride sırala ya da başka kategoriye taşı ---
       li.addEventListener('dragstart', e => {
@@ -363,17 +450,19 @@ Bu işlem geri alınamaz.`)) return;
         const d = dragging;
         if (d.task === task) return endDrag();
         if (d.cat === cat && cat.shared) return endDrag();   // ortak kategoride sıra oluşturma tarihine göre
+        if (d.cat === cat && blockOf(cat, d.task).includes(task)) return endDrag();   // görev kendi alt görevinin yanına bırakılamaz
         const before = upperHalf(e, li);
-        const moved = moveOrCopy(d, cat);
-        cat.tasks.splice(cat.tasks.indexOf(task) + (before ? 0 : 1), 0, moved);
+        const block = takeBlock(d, cat);
+        setBlockLevel(block, lvl(task));   // hedef görevle aynı seviyeye (kardeş) gelir
+        const ti = cat.tasks.indexOf(task);
+        cat.tasks.splice(before ? ti : blockEnd(cat.tasks, ti), 0, ...block);
         // Yapılmış/yapılmamış ayrımı her zaman korunur
-        cat.tasks = partition(cat.tasks);
+        cat.tasks = sortTree(cat.tasks);
         endDrag();
         saveTodos();
       });
       ul.append(li);
-      // Görevdeki "+" ile açılan boş satır, o görevin hemen altında durur
-      if (newHere && pendingNew.after === task) ul.append(buildNewTaskRow());
+      if (newAnchor === task) ul.append(buildNewTaskRow());
     }
     if (!tasks.length && !(newHere && !pendingNew.after)) {
       const li = document.createElement('li');
@@ -402,9 +491,28 @@ Bu işlem geri alınamaz.`)) return;
   renderStats();
 }
 
+// Bloğu bir seviye girintile (önceki kardeşin son alt görevi olur) ya da bir seviye çıkar (üstünün hemen altına geçer). Değişirse true.
+function indentTask(cat, task, delta) {
+  const t = cat.tasks, i = t.indexOf(task), L = lvl(task);
+  const block = t.slice(i, blockEnd(t, i));
+  if (delta > 0) {
+    const prev = t[i - 1];
+    if (!prev || lvl(prev) < L || Math.max(...block.map(lvl)) >= MAX_LEVEL) return false;   // önceki bir kardeş olmalı, en fazla 3 seviye
+    setBlockLevel(block, L + 1);
+  } else {
+    if (!L) return false;
+    const parent = parentOf(t, i);
+    t.splice(i, block.length);
+    setBlockLevel(block, L - 1);
+    t.splice(blockEnd(t, t.indexOf(parent)), 0, ...block);   // sonraki kardeşler üstte kalır, bu görev üstünün altına geçer
+  }
+  cat.tasks = sortTree(t);
+  return true;
+}
+
 // Görev metnini yerinde düzenle: Enter / odaktan çıkma kaydeder, Esc vazgeçer.
 // Ham Markdown düzenlenir (ör. **kalın**). Metne "📅 2026-10-10" yazılırsa son tarih olarak alınır.
-function editTask(li, task) {
+function editTask(li, task, cat) {
   if (li.classList.contains('editing')) return;
   li.classList.add('editing');
   li.draggable = false;
@@ -416,7 +524,7 @@ function editTask(li, task) {
   input.focus();
   input.setSelectionRange(input.value.length, input.value.length);
   let done = false;
-  const finish = ok => {
+  const finish = (ok, indent = 0) => {
     if (done) return;
     done = true;
     // Hem "📅 2026-10-10" biçimi hem de "yarın / cuma / her hafta" gibi ifadeler tanınır
@@ -425,16 +533,20 @@ function editTask(li, task) {
     const nl = parsed.text !== task.text ? parseNatural(parsed.text) : { text: parsed.text };
     const text = nl.text || parsed.text;
     const due = parsed.due || nl.due, rec = parsed.rec || nl.rec;
-    if (ok && text && (text !== task.text || due || rec)) {
+    const changed = ok && text && (text !== task.text || due || rec);
+    if (changed) {
       task.text = text;
       if (due) task.due = due;
       if (rec) task.rec = rec;
-      saveTodos();
-    } else renderTodos();
+    }
+    // Tab / Shift+Tab: görevi bir önceki görevin alt görevi yap / bir seviye çıkar
+    const moved = ok && indent && !cat.shared && indentTask(cat, task, indent);
+    if (changed || moved) saveTodos(); else renderTodos();
   };
   input.onkeydown = e => {
     if (e.key === 'Enter') { e.preventDefault(); finish(true); }
     if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+    if (e.key === 'Tab') { e.preventDefault(); finish(true, e.shiftKey ? -1 : 1); }
   };
   input.onblur = () => finish(true);
 }
@@ -444,18 +556,29 @@ function editTask(li, task) {
 // Enter: ekle ve altına bir sonraki boş satırı aç (art arda hızlı giriş) · Esc ya da boş bırakıp çıkmak: vazgeç.
 // Yeni görev varsayılan olarak bugünün tarihini alır; satırdaki tarih düğmesinden değiştirilebilir,
 // metne "yarın", "cuma", "15 ekim", "her hafta" gibi yazılırsa o algılanır.
-function startNewTask(cat, after = null) {
+// level: eklenecek görevin seviyesi (görevin "+"ı kardeş, "⤷"ı alt görev ekler); Tab / Shift+Tab ile satırda değişir
+function startNewTask(cat, after = null, level = 0) {
   if (collapsed.delete(cat.name)) store.set('collapsedCats', [...collapsed]);
   selectCat(cat.name);
-  pendingNew = { cat, after, due: todayISO(), rec: null, text: '', manual: false };
+  pendingNew = { cat, after, level: after ? level : 0, due: todayISO(), rec: null, text: '', manual: false };
   pendingFocus = true;
   renderTodos();
+}
+
+// Bekleyen yeni görevin listedeki yeri: after görevinin (ya da p.level seviyesindeki üstünün) bloğundan hemen sonra
+function newTaskIndex(p) {
+  const t = p.cat.tasks, ai = t.indexOf(p.after);
+  if (ai === -1) return 0;
+  if (p.level > lvl(p.after)) return blockEnd(t, ai);
+  for (let j = ai; j >= 0; j--) if (lvl(t[j]) === p.level) return blockEnd(t, j);
+  return blockEnd(t, ai);
 }
 
 function buildNewTaskRow() {
   const p = pendingNew;
   const li = document.createElement('li');
   li.className = 'new-task';
+  li.style.setProperty('--lvl', p.level);
   li.innerHTML = '<input type="checkbox" disabled>'
     + '<input class="task-input" placeholder="Yeni görev…  (Enter: ekle · Esc: vazgeç)" autocomplete="off">'
     + '<button type="button" class="due-btn"></button>';
@@ -491,16 +614,27 @@ function buildNewTaskRow() {
     finished = true;
     const due = parsed.due || nl.due || p.due, rec = parsed.rec || nl.rec || p.rec;
     const task = { done: false, text, due: due || undefined, rec: rec || undefined, created: stampNow() };
-    const idx = p.after ? p.cat.tasks.indexOf(p.after) : -1;
-    if (idx === -1) insertTask(p.cat, task);
-    else { p.cat.tasks.splice(idx + 1, 0, task); p.cat.tasks = partition(p.cat.tasks); }
-    pendingNew = chain ? { cat: p.cat, after: p.cat.shared ? null : task, due: todayISO(), rec: null, text: '', manual: false } : null;
+    if (p.level) task.level = p.level;
+    if (!p.after || p.cat.tasks.indexOf(p.after) === -1) insertTask(p.cat, task);
+    else { p.cat.tasks.splice(newTaskIndex(p), 0, task); p.cat.tasks = sortTree(p.cat.tasks); }
+    pendingNew = chain ? { cat: p.cat, after: p.cat.shared ? null : task, level: p.cat.shared ? 0 : p.level, due: todayISO(), rec: null, text: '', manual: false } : null;
     pendingFocus = chain;
     saveTodos();
   };
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); commit(true); }
     if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+    if (e.key === 'Tab') {   // satırın seviyesini değiştir: Tab → alt görev, Shift+Tab → bir seviye çıkar
+      e.preventDefault();
+      const max = p.after ? Math.min(MAX_LEVEL, lvl(p.after) + 1) : 0;
+      const next = Math.max(0, Math.min(max, p.level + (e.shiftKey ? -1 : 1)));
+      if (next === p.level) return;
+      finished = true;   // satır yeniden çizilecek; eski satırın odak kaybı görev eklemesin
+      p.level = next;
+      p.text = input.value;
+      pendingFocus = true;
+      renderTodos();
+    }
   });
   // Odak başka yere gidince: yazı varsa ekle, boşsa vazgeç. Tarih penceresine geçiş ya da pencerenin
   // (başka uygulamaya geçerek) odağı kaybetmesi satırı kapatmaz.
