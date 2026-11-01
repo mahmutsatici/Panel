@@ -186,7 +186,6 @@ function pickDate(anchor, { due = null, rec = null, time = null, remind = [], al
   renderDatePop();
   datePop.hidden = false;
   positionDatePop();
-  datePop.querySelector('.dp-text').focus();
 }
 function closeDatePop() {
   const onClose = datePopState?.onClose;
@@ -195,7 +194,10 @@ function closeDatePop() {
   onClose?.();   // ör. yeni görev satırı yazma odağını geri alır
 }
 function positionDatePop() {
-  const r = datePopState.anchor.getBoundingClientRect();
+  // Bağlı düğme liste yeniden çizilince kaybolabilir (ör. gün penceresindeki saat düğmesi); o zaman son bilinen konum kullanılır
+  const s = datePopState;
+  if (s.anchor.isConnected) s.rect = s.anchor.getBoundingClientRect();
+  const r = s.rect;
   const w = datePop.offsetWidth, h = datePop.offsetHeight;
   datePop.style.left = `${Math.min(Math.max(8, r.left + r.width / 2 - w / 2), innerWidth - w - 8)}px`;
   const top = r.bottom + 6 + h > innerHeight - 8 ? r.top - h - 6 : r.bottom + 6;
@@ -207,7 +209,7 @@ function commitDate(patch, close) {
   if (!s.due) { s.time = null; s.remind = s.remind.filter(t => !isRelRemind(t)); }   // saat ve göreli hatırlatıcı bir güne bağlıdır
   s.onChange({ due: s.due, rec: s.rec, time: s.time, remind: s.remind });
   // Liste yeniden çizilince bağlı düğme yok olabilir; o zaman pencere olduğu yerde kalsın
-  if (close) closeDatePop(); else { renderDatePop(); if (datePopState.anchor.isConnected) positionDatePop(); }
+  if (close) closeDatePop(); else { renderDatePop(); positionDatePop(); }
 }
 // ---- Saat seçici: 15 dakikalık adımlarla kaydırılabilir liste (her satır bir saat: SS:00 SS:15 SS:30 SS:45) ----
 const TIME_MINS = ['00', '15', '30', '45'];
@@ -243,8 +245,6 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeTimePop
 
 function renderDatePop() {
   const s = datePopState, today = todayISO();
-  const nextMonday = (() => { let d = addDays(today, 1); while (parseISODate(d).getDay() !== 1) d = addDays(d, 1); return d; })();
-  const quick = [['Bugün', today], ['Yarın', addDays(today, 1)], ['Haftaya', addDays(today, 7)], ['Pazartesi', nextMonday]];
   const customRem = s.remind.filter(t => !REMIND_PRESETS.some(([n]) => n + 'dk' === t));
   // Gövde başlığı (ay görünümü dışındaki bölümler): geri + başlık + sağda isteğe bağlı düğme
   const paneHead = (icon, title, extra = '') => `<div class="dp-pane-h"><button type="button" class="dp-nav" data-view="cal" title="Takvime dön">${ico('chev-l')}</button>${ico(icon)}<b>${title}</b>${extra}</div>`;
@@ -258,7 +258,7 @@ function renderDatePop() {
       ${s.time ? '' : '<p class="dp-hint">Bu seçenekler için görevin saati olmalı. <button type="button" class="dp-link" data-view="time">Saat seç</button></p>'}
       <div class="dp-sub">Belirli zaman</div>
       <div class="dp-radd-row"><input type="date" class="dp-rd" value="${s.due || today}" aria-label="Hatırlatma günü">
-        <select class="dp-rt" aria-label="Hatırlatma saati">${timeOpts.map(t => `<option${t === (s.time && timeOpts.includes(s.time) ? s.time : '09:00') ? ' selected' : ''}>${t}</option>`).join('')}</select>
+        <button type="button" class="dp-rt-btn" aria-label="Hatırlatma saati">${ico('clock')}<span>${s.remTime || (s.time && timeOpts.includes(s.time) ? s.time : '09:00')}</span>${ico('chev-d')}</button>
         <button type="button" class="dp-radd" title="Hatırlatıcı ekle">${ico('plus')}Ekle</button></div>
       ${customRem.length ? `<div class="dp-chips">${customRem.map(t => `<span class="dp-tok">${esc(remindLabel(t))}<button type="button" data-remind="${t}" title="Kaldır" aria-label="Kaldır">${ico('x')}</button></span>`).join('')}</div>` : ''}`;
   } else if (s.view === 'rec') {
@@ -298,11 +298,6 @@ function renderDatePop() {
   const enter = s.view !== s.shown;   // bölüm değiştiyse gövde hafifçe belirsin
   s.shown = s.view;
   datePop.innerHTML = `
-    <label class="dp-in">${ico('calendar')}<input class="dp-text" placeholder="Yaz: cuma 15:30, 3 gün sonra, her hafta" autocomplete="off" spellcheck="false"></label>
-    <div class="dp-quick">
-      ${quick.map(([l, iso]) => `<button type="button" data-iso="${iso}" class="${s.due === iso ? 'on' : ''}">${l}</button>`).join('')}
-      <button type="button" data-iso="" class="none${s.due ? '' : ' on'}" title="Tarihi kaldır">Tarihsiz</button>
-    </div>
     <div class="dp-body dp-v-${s.view}${enter ? ' enter' : ''}">${body}</div>
     ${props ? `<div class="dp-props">${props}</div>` : ''}
     <div class="dp-foot"><span class="dp-sum${s.due ? '' : ' none'}">${esc(sum)}</span><button type="button" class="dp-done">${ico('check')}Tamam</button></div>`;
@@ -339,27 +334,19 @@ function renderDatePop() {
     const t = b.dataset.remind;
     commitDate({ remind: s.remind.includes(t) ? s.remind.filter(x => x !== t) : [...s.remind, t] }, false);
   });
+  const rtBtn = datePop.querySelector('.dp-rt-btn');
+  if (rtBtn) rtBtn.onclick = () => pickTime(rtBtn, rtBtn.querySelector('span').textContent, t => { s.remTime = t || '09:00'; renderDatePop(); });
   datePop.querySelector('.dp-radd')?.addEventListener('click', () => {
-    const t = `${datePop.querySelector('.dp-rd').value}T${datePop.querySelector('.dp-rt').value}`;
+    const t = `${datePop.querySelector('.dp-rd').value}T${datePop.querySelector('.dp-rt-btn span').textContent}`;
     if (REMIND_RE.test(t) && !s.remind.includes(t)) commitDate({ remind: [...s.remind, t] }, false);
   });
   datePop.querySelector('.dp-done').onclick = closeDatePop;
-  const input = datePop.querySelector('.dp-text');
-  input.onkeydown = e => {
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
-    // "x" ön ekiyle çözümle (takePhrase boş metin kabul etmediği için)
-    const p = parseNatural(`x ${input.value}`);
-    if (p.time && s.allowTime && !p.due && !s.due) p.due = todayISO();   // yalnızca saat yazıldıysa bugün
-    if (p.due || p.rec) commitDate({ due: p.due || s.due || (p.rec ? todayISO() : null), rec: p.rec || s.rec, ...(p.time && s.allowTime ? { time: p.time } : {}) }, !p.rec);
-    else { input.classList.add('bad'); setTimeout(() => input.classList.remove('bad'), 600); }
-  };
 }
 const WEEKDAY_SHORT = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 const fmtMonthYear = new Intl.DateTimeFormat('tr-TR', { month: 'long', year: 'numeric' });
 const fmtLong = new Intl.DateTimeFormat('tr-TR', { weekday: 'long', day: 'numeric', month: 'long' });
 document.addEventListener('mousedown', e => {
-  if (datePopState && !e.target.closest('#datePop') && !datePopState.anchor.contains(e.target)) closeDatePop();
+  if (datePopState && !e.target.closest('#datePop, #timePop') && !datePopState.anchor.contains(e.target)) closeDatePop();
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && datePopState) closeDatePop(); });
 

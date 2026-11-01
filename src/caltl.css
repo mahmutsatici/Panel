@@ -1,0 +1,122 @@
+/* Takvim Hafta/Gün çizelgesi: gün başlıkları ve "Gün boyu" şeridi (calendar.js → renderCalTimeline). styles.css içindeki eski .cal-col-head / .cal-tl-allday / .cal-ad kurallarını bu dosya geçersiz kılar */
+
+/* Başlık ve şerit satırları, kaydırılan gövdenin kaydırma çubuğu kadar sağda pay bırakır: sütunlar hizalı kalır
+   (şeridin arka planı paya taşmasın diye o satırda boşluk, çubuk genişliği kadar (styles.css: 8px) dış boşluktur) */
+.cal-tl-heads, .cal-tl-body { scrollbar-gutter: stable; }
+.cal-tl-heads { overflow: hidden; }
+.cal-tl-allday { margin-right: 8px; }
+
+/* ---- Gün başlıkları ---- */
+.cal-tl-heads { padding: 2px 0 8px; align-items: stretch; }
+.cal-tl-wk {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  border-radius: 10px; background: var(--card-2); color: var(--muted); line-height: 1.1;
+}
+.cal-tl-wk b { font-size: var(--fs-lead); font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.cal-tl-wk span { font-size: 10px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; }
+
+.cal-col-head {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  min-width: 0; padding: 7px 4px 8px; border: 1px solid var(--line); border-radius: 12px;
+  background: var(--card-2); color: var(--muted); font-size: var(--fs-meta); font-weight: 600; cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.cal-col-head:hover { background: var(--card-3); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.cal-col-head .ch-wd { font-size: 10.5px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; }
+.cal-col-head .ch-date { display: flex; align-items: baseline; gap: 5px; }
+.cal-col-head b.ch-n {
+  width: auto; height: auto; display: inline; border-radius: 0; background: none;
+  font-size: 22px; font-weight: 700; line-height: 1; letter-spacing: -.5px; color: var(--text); font-variant-numeric: tabular-nums;
+}
+.cal-col-head .ch-mon { font-size: var(--fs-meta); font-weight: 600; color: var(--muted); }
+/* Ayın 1'i ve haftanın ilk sütunu: ay adı belirgin */
+.cal-col-head.m1 .ch-mon { color: var(--accent); font-weight: 700; }
+/* Geçmiş günler sönük, hafta sonu hafif kırmızımsı */
+.cal-col-head.past { background: transparent; }
+.cal-col-head.past .ch-n, .cal-col-head.past .ch-wd { opacity: .55; }
+.cal-col-head.we .ch-wd { color: color-mix(in srgb, var(--muted) 45%, var(--load-3)); }
+.cal-col-head.we:not(.today) { background: color-mix(in srgb, var(--load-3) 5%, var(--card-2)); }
+/* Bugün: dolu vurgu kartı */
+.cal-col-head.today { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 35%, transparent); }
+.cal-col-head.today .ch-wd, .cal-col-head.today .ch-mon, .cal-col-head.today b.ch-n { color: #fff; background: none; opacity: 1; }
+.cal-col-head.today:hover { background: color-mix(in srgb, var(--accent) 88%, var(--text)); }
+/* Gün penceresi açık olan gün */
+.cal-col-head.sel:not(.today) { background: var(--accent-soft); border-color: var(--accent); }
+.cal-col-head.sel.today { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--accent); }
+
+/* Gün görünümü: tek geniş başlık (numara · gün adı / ay yıl · Bugün) */
+.cal-col-head.cal-dh { flex-direction: row; justify-content: flex-start; gap: 14px; padding: 10px 18px; }
+.cal-dh b.ch-n { font-size: 34px; letter-spacing: -1px; }
+.cal-dh .ch-info { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.cal-dh .ch-wd { font-size: var(--fs-lead); font-weight: 700; letter-spacing: 0; text-transform: none; color: var(--text); }
+.cal-dh .ch-mon { font-size: var(--fs-sub); }
+.cal-dh.m1 .ch-mon { color: var(--muted); font-weight: 600; }
+.cal-dh .ch-rel { margin-left: auto; padding: 2px 10px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-size: var(--fs-sub); font-weight: 700; }
+.cal-dh.today .ch-rel { background: rgba(255,255,255,.22); color: #fff; }
+.cal-dh.today .ch-wd, .cal-dh.today .ch-mon { color: #fff; }
+.cal-dh.past .ch-wd { opacity: .7; }
+
+/* ---- "Gün boyu" şeridi ---- */
+.cal-tl-allday {
+  padding: 8px 0; border: 0; border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--card-2));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 14%, var(--line));
+  margin-bottom: 2px;
+}
+.cal-tl-lbl {
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 3px;
+  padding: 2px 0 0; color: var(--accent); font-size: 10.5px; font-weight: 700; line-height: 1.15; text-align: center; align-self: stretch;
+}
+.cal-tl-lbl .ico { width: 17px; height: 17px; }
+.cal-tl-lbl span { color: var(--muted); letter-spacing: .2px; }
+.cal-tl-lbl em {
+  font-style: normal; min-width: 18px; padding: 0 6px; border-radius: 99px; line-height: 17px;
+  background: var(--accent); color: #fff; font-size: 10.5px; font-variant-numeric: tabular-nums;
+}
+
+.cal-ad {
+  position: relative; display: flex; flex-direction: column; gap: 4px;
+  min-height: 34px; max-height: 148px; overflow-y: auto; overscroll-behavior: contain;
+  padding: 3px; border-radius: 9px; cursor: pointer; scrollbar-width: thin;
+  background: color-mix(in srgb, var(--card) 55%, transparent);
+}
+.cal-ad:hover { background: var(--card); }
+.cal-ad.drop-day { background: var(--accent-soft); }
+.cal-ad::-webkit-scrollbar { width: 5px; }
+.cal-ad::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--accent) 55%, var(--line)); }   /* sığmayan görev olduğu belli olsun */
+.cal-ad .cal-item.cal-ad-item {
+  flex: none; display: flex; align-items: center; gap: 7px; min-height: 26px; box-sizing: border-box;
+  padding: 3px 9px 3px 6px; border: 0; border-left: 3px solid var(--c); border-radius: 7px;
+  background: color-mix(in srgb, var(--c) 17%, var(--card)); color: var(--text);
+  font-size: var(--fs-sub); font-weight: 500; line-height: 1.3; cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0,0,0,.12); transition: background .12s, transform .12s;
+}
+.cal-ad .cal-ad-item:hover { background: color-mix(in srgb, var(--c) 27%, var(--card)); }
+.cal-ad-item .cal-ad-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-ad .cal-ad-item.late { color: var(--load-3); font-weight: 650; }
+.cal-ad .cal-ad-item.done { opacity: .6; background: color-mix(in srgb, var(--c) 7%, transparent); box-shadow: none; }
+.cal-ad-item.done .cal-ad-t { text-decoration: line-through; color: var(--muted); }
+.cal-ad .cal-chk { width: 16px; height: 16px; border-width: 1.6px; background: var(--card); cursor: pointer; }
+.cal-ad .cal-chk:hover { background: color-mix(in srgb, var(--c) 30%, var(--card)); color: var(--c); }
+.cal-ad .cal-ad-item.done .cal-chk { background: var(--c); color: #fff; }
+
+/* Ekle ipucu: boş hücrede ortada, dolu hücrede listenin altında; yalnızca üzerine gelince görünür */
+.cal-ad-add {
+  flex: none; display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 22px;
+  border-radius: 7px; color: var(--accent); font-size: var(--fs-meta); font-weight: 600;
+  opacity: 0; transition: opacity .15s, background .15s;
+}
+.cal-ad-add .ico { width: 13px; height: 13px; stroke-width: 2.2; }
+.cal-ad.empty .cal-ad-add { flex: 1; border: 1px dashed transparent; }
+.cal-ad:hover .cal-ad-add { opacity: .85; }
+.cal-ad.empty:hover .cal-ad-add { border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: var(--accent-soft); }
+.cal-ad:not(.empty) .cal-ad-add:hover { background: var(--accent-soft); }
+.cal-ad.drop-day .cal-ad-add { opacity: 0; }
+
+/* Gün görünümü: geniş şeritte görevler yan yana akar */
+.cal-tl.day .cal-ad { flex-direction: row; flex-wrap: wrap; align-content: flex-start; }
+.cal-tl.day .cal-ad .cal-ad-item { flex: 0 1 260px; min-width: 160px; }
+.cal-tl.day .cal-ad:not(.empty) .cal-ad-add { padding: 0 12px; }
+
+/* Şerit ile saat çizelgesi arası */
+.cal-tl-body { padding-top: 10px; }

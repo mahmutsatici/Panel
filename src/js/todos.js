@@ -314,6 +314,7 @@ function dueButtonHtml(task) {
 //   showCat: satırda kategori etiketi · flat: alt görev girintisi/daraltma/ekleme yok (kategoriye göre gruplanmayan görünümler) · crumb: üst görevin adı
 function buildTaskRow(cat, task, { drag = true, showCat = false, flat = false, crumb = '' } = {}) {   // drag: true = sürükle + sırala/bırak · 'source' = yalnızca sürüklenebilir
   const ti = cat.tasks.indexOf(task), subs = flat ? [] : cat.tasks.slice(ti + 1, blockEnd(cat.tasks, ti));
+  const dueHtml = dueButtonHtml(task);
   const li = document.createElement('li');
   li.className = (task.done ? 'done' : '') + (lvl(task) && !flat ? ' sub' : '');
   li.style.setProperty('--lvl', flat ? 0 : lvl(task));
@@ -322,14 +323,17 @@ function buildTaskRow(cat, task, { drag = true, showCat = false, flat = false, c
   li.innerHTML = (subs.length ? `<button class="fold" title="Alt görevleri göster/gizle">${folded.has(task) ? '▸' : '▾'}</button>` : '')
     + `<input type="checkbox" ${task.done ? 'checked' : ''}>`
     + `<span class="txt" title="${esc(taskTitle(task))}">${crumb ? `<span class="crumb" title="Üst görev">↳ ${esc(crumb)}</span> ` : ''}${renderInline(task.text)}</span>`
-    + (subs.length ? `<span class="sub-cnt" title="Tamamlanan alt görev">${subs.filter(t => t.done).length}/${subs.length}</span>` : '')
-    + (cat.shared ? assigneeButtonHtml(cat, task) : '')
-    + (showCat ? `<span class="cat-tag" style="--c:${catColor(cat)}">${cat.icon ? `<span class="cat-ico">${cat.icon}</span>` : '<span class="dot"></span>'}${esc(cat.name)}</span>` : '')
-    + dueButtonHtml(task)
+    // Sağdaki bilgiler (alt görev sayısı, atanan, kategori, tarih) "meta" içinde: geniş satırda metnin yanında, dar kartta metnin altında durur.
+    // Üzerine gelince görünen işlemler "row-tools" içinde metnin üzerine biner, yer kaplamaz.
+    + `<span class="meta">${(subs.length ? `<span class="sub-cnt" title="Tamamlanan alt görev">${subs.filter(t => t.done).length}/${subs.length}</span>` : '')
+      + (cat.shared ? assigneeButtonHtml(cat, task) : '')
+      + (showCat ? `<span class="cat-tag" style="--c:${catColor(cat)}">${cat.icon ? `<span class="cat-ico">${cat.icon}</span>` : '<span class="dot"></span>'}${esc(cat.name)}</span>` : '')
+      + (dueHtml.includes('class="due none"') ? '' : dueHtml)}</span>`
+    + `<span class="row-tools">${dueHtml.includes('class="due none"') ? dueHtml : ''}`
     + `<button class="row-add prio" title="Öncelik">${ico('flag')}</button>`
     + (cat.shared || flat ? '' : '<button class="row-add" title="Altına görev ekle">＋</button>')   // ortak kategoride sıra oluşturma tarihine göre; yalnızca alt görev eklenir
     + (flat || lvl(task) >= MAX_LEVEL ? '' : '<button class="row-add sub-add" title="Alt görev ekle">⤷</button>')
-    + '<button class="del" title="Sil">✕</button>';
+    + '<button class="del" title="Sil">✕</button></span>';
   const fold = li.querySelector('.fold');
   if (fold) fold.onclick = () => { folded.has(task) ? folded.delete(task) : folded.add(task); renderTodos(); };
   li.querySelector('input').onchange = e => setDone(cat, task, e.target.checked);

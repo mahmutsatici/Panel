@@ -1179,3 +1179,54 @@ body.solo .clock[data-mode="seconds"] .lcd { height: min(34vh, 18vw); padding: m
 
 .cd-catbtn .ico { width: 14px; height: 14px; color: var(--muted); flex: none; }
 .cal-tl-body { padding-top: 8px; }
+
+/* ---- Görev satırı: meta (tarih, atanan, kategori) ve üzerine gelince işlemler ---- */
+.cat li .meta { display: contents; }
+.cat li .row-tools { display: none; position: absolute; right: 4px; top: 3px; z-index: 2; align-items: center; gap: 2px; padding: 1px 3px; background: var(--card-3); border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,.25); }
+.cat li:hover .row-tools, .cat li:focus-within .row-tools { display: inline-flex; }
+.cat li .row-tools .del, .cat li .row-tools .row-add, .cat li .row-tools .due.none { opacity: 1; }
+.cat li .row-tools .due.none { background: none; padding: 0 5px; }
+.cat li .txt { flex: 1 1 120px; }
+/* Dar kartta (ör. ana sayfa) bilgiler metnin altına geçer; metin tüm genişliği kullanır */
+.cat { container-type: inline-size; container-name: cat; }
+@container cat (max-width: 440px) {
+  .cat li { flex-wrap: wrap; row-gap: 3px; }
+  .cat li .txt { flex: 1 1 calc(100% - 40px); }
+  .cat li .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; flex: 0 0 100%; padding-left: 28px; }
+  .cat li .meta:empty { display: none; }
+  .cat li .fold { top: 6px; }
+}
+
+/* ---- Öncelik: halka, zemin ve sol çubuk ile belirgin ---- */
+.cat li[data-p]::before, .cal-tasks li[data-p]::before { content: ''; position: absolute; left: 0; top: 6px; bottom: 6px; width: 3px; border-radius: 3px; background: var(--pc); }
+.cat li[data-p="3"] { --pc: var(--load-3); } .cat li[data-p="2"] { --pc: var(--load-2); } .cat li[data-p="1"] { --pc: var(--accent); }
+.cat li[data-p] input[type="checkbox"]:not(:checked) { border-width: 2px; border-color: var(--pc); background: color-mix(in srgb, var(--pc) 14%, transparent); }
+.cal-tasks li { position: relative; }
+.cal-tasks li[data-p="3"] { --pc: var(--load-3); } .cal-tasks li[data-p="2"] { --pc: var(--load-2); } .cal-tasks li[data-p="1"] { --pc: var(--accent); }
+.cal-tasks li[data-p] input[type="checkbox"]:not(:checked) { border-width: 2px; border-color: var(--pc); background: color-mix(in srgb, var(--pc) 14%, transparent); }
+
+/* ---- Ay görünümü: bugün yuvarlak değil yuvarlatılmış dikdörtgen (altındaki noktalarla çakışmaz) ---- */
+.cal-d.today .cal-n { border-radius: 8px; aspect-ratio: auto; width: 34px; height: 24px; }
+body.solo .calendar .cal-d.today .cal-n { width: 34px; height: 26px; }
+
+/* ---- LCD saat küçük kartta metinle aynı hizada, kart genişliğini doldurur ---- */
+.clock[data-mode="seconds"] .lcd { align-self: stretch; }
+body.solo .clock[data-mode="seconds"] .lcd { align-self: center; }
+
+/* ---- Gün penceresi başlığı: büyük gün numarası, gün adı, ay yıl ve hafta ---- */
+.cd-date { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; }
+.cd-num { font-size: 30px; font-weight: 700; line-height: 1; min-width: 34px; text-align: center; color: var(--accent); font-variant-numeric: tabular-nums; }
+.cd-info { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.cd-info b { font-size: var(--fs-title); font-weight: 650; text-transform: capitalize; }
+.cd-info span { font-size: var(--fs-meta); color: var(--muted); }
+.cd-rel { margin-left: auto; font-size: var(--fs-meta); font-weight: 650; color: var(--accent); background: var(--accent-soft); border-radius: 99px; padding: 1px 9px; }
+.cd-title { display: none; }
+.cd-nav .ico { width: 16px; height: 16px; display: block; margin: auto; }
+/* satırda saat metinden sonra; saati olmayanda yalnızca üzerine gelince görünür */
+.cd-t.none { display: none; }
+.cal-tasks li:hover .cd-t.none { display: inline-flex; opacity: 1; }
+.cd-t { min-width: 0; }
+
+/* Takvim: sürüklerken gölge blok */
+.cal-ghost { position: absolute; left: 2px; right: 2px; z-index: 3; pointer-events: none; box-sizing: border-box; padding: 1px 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border-radius: 6px; border: 1.5px dashed var(--accent); background: color-mix(in srgb, var(--accent) 22%, var(--card)); line-height: 1.5; font-size: var(--fs-meta); }
+.cal-ghost b { color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; margin-right: 4px; }

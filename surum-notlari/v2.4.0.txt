@@ -1,0 +1,13 @@
+Panel 2.4.0 — Düzeltmeler ve cila
+=================================
+
+• Görev satırları: dar kartlarda (ör. ana sayfa) görev metni artık tüm genişliği kullanır; tarih, atanan ve kategori bilgisi metnin altında küçük etiketler olarak durur.
+  Üzerine gelince çıkan düğmeler (öncelik, alt görev, sil...) metnin üstüne biner, yer kaplamaz.
+• Öncelik daha belirgin: sol çubuk, kalın ve renkli onay halkası.
+• Ay görünümünde bugün yuvarlatılmış dikdörtgenle işaretlenir; altındaki görev noktaları artık net görünür.
+• Tarih / saat / hatırlatıcı penceresi: üstteki yazı kutusu ve hızlı gün düğmeleri kaldırıldı (görev metnine "yarın 15:30" yazmak yine çalışır).
+  Hatırlatıcı bölümüne tıklayınca pencere sol üste kaymıyor; belirli zaman için saat artık düzgün bir saat listesinden seçiliyor.
+• Takvim gün penceresi: gün numarası büyük, gün adı, ay yıl ve hafta numarası net; görevler bölümlere ayrılmadan tek listede; saat, metnin sonunda (saati olmayan görevde boşluk bırakmaz).
+• Hafta/Gün görünümü: "Gün boyu" şeridine tıklayınca o gün için görev eklenir; görevi saate sürüklerken bırakılacağı saat gölge blokla önceden görünür;
+  başlıkta hafta numarası ve tam tarih; gün boyu şeridi ve gün başlıkları yenilendi.
+• Saniyeli dijital saat küçük kartta metinle aynı hizada.

@@ -3,6 +3,7 @@
 // Tam ekranda Hafta ve Gün görünümü de vardır (saat çizelgesi: saati olan görevler saatinde, olmayanlar "Gün boyu" şeridinde).
 // Bir güne tıklayınca o güne ait görevler kartın altında listelenir; oradan işaretlenebilir / eklenebilir.
 const fmtMonth = new Intl.DateTimeFormat('tr-TR', { month: 'long', year: 'numeric' });
+const fmtFullDay = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'long' });
 const WEEKDAYS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 let calMonth = (() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); })();
 let calSelected = todayISO();
@@ -67,7 +68,7 @@ function positionCalDay() {
     r = { left: calAnchorPt.x, top: calAnchorPt.y, bottom: calAnchorPt.y + 4, width: 0 };
     card = true;
   } else {
-    const cell = document.querySelector(`.cal-d[data-iso="${calSelected}"], .cal-col-head[data-iso="${calSelected}"]`);
+    const cell = document.querySelector(`.cal-grid:not([hidden]) .cal-d[data-iso="${calSelected}"], .cal-tl:not([hidden]) .cal-col-head[data-iso="${calSelected}"]`);   // görünür görünümdeki hücre
     card = cell?.closest('.card');
     if (!cell || !card || card.hidden) return closeCalDay();
     r = cell.getBoundingClientRect();
@@ -208,8 +209,8 @@ function openCalDay(iso, opts = {}) {
   if (opts.at) $('#calDay .cd-add input')?.focus();
 }
 
-// Gün penceresi: üstte gün (‹ › ile günler arası geçiş), ortada görevler (Gecikmiş / Gün boyu / saate göre),
-// altta ekleme formu (görev + saat + kategori). Çizelgede boş bir saate tıklanınca saat dolu gelir.
+// Gün penceresi: üstte gün (büyük gün numarası, gün adı, ay yıl ve hafta; ‹ › ile günler arası geçiş), ortada görevler (tek liste), altta ekleme formu.
+// Çizelgede boş bir saate ya da "Gün boyu" şeridine tıklanınca gün (ve saat) dolu gelir.
 function renderCalDay(byDue) {
   const box = $('#calDay');
   const items = byDue.get(calSelected) || [];
@@ -219,7 +220,7 @@ function renderCalDay(byDue) {
     : [];
   const diff = dayDiff(calSelected);
   const rel = diff === 0 ? 'Bugün' : diff === 1 ? 'Yarın' : diff === -1 ? 'Dün' : '';
-  const open = items.filter(x => !x.task.done).length;
+  const d = parseISODate(calSelected);
   const cats = activeCats();
   if (!cats.some(c => c.name === calAddCat)) calAddCat = currentCat().name;
   const addCat = cats.find(c => c.name === calAddCat);
@@ -227,10 +228,13 @@ function renderCalDay(byDue) {
   box.hidden = false;
   box.innerHTML = `
     <div class="cd-head">
-      <button type="button" class="cd-nav" data-d="-1" title="Önceki gün">‹</button>
-      <div class="cd-title"><b>${fmtLongDay.format(parseISODate(calSelected))}</b>
-        <span class="muted">${[rel, items.length ? `${open} açık / ${items.length} görev` : 'görev yok'].filter(Boolean).join(' · ')}</span></div>
-      <button type="button" class="cd-nav" data-d="1" title="Sonraki gün">›</button>
+      <button type="button" class="cd-nav" data-d="-1" title="Önceki gün">${ico('chev-l')}</button>
+      <div class="cd-date">
+        <span class="cd-num">${d.getDate()}</span>
+        <span class="cd-info"><b>${fmtWeekday.format(d)}</b><span>${fmtMonth.format(d)} · ${isoWeek(d)}. hafta</span></span>
+        ${rel ? `<span class="cd-rel">${rel}</span>` : ''}
+      </div>
+      <button type="button" class="cd-nav" data-d="1" title="Sonraki gün">${ico('chev-r')}</button>
       <button type="button" class="icon-btn cal-close" title="Kapat (Esc)">✕</button>
     </div>
     <div class="cd-body"></div>
@@ -243,22 +247,19 @@ function renderCalDay(byDue) {
       </div>
     </form>`;
 
+  // Tek liste: gecikmişler (bugünse), gün boyu görevler, sonra saate göre saatliler
   const body = box.querySelector('.cd-body');
-  const section = (title, rows, cls = '') => {
-    if (!rows.length) return;
-    const h = document.createElement('div');
-    h.className = `cd-sec ${cls}`;
-    h.textContent = title;
+  const rows = [
+    ...overdue.map(x => [x, true]),
+    ...sortDay(items.filter(x => !x.task.time)).map(x => [x, false]),
+    ...sortDay(items.filter(x => x.task.time)).map(x => [x, false]),
+  ];
+  if (rows.length) {
     const ul = document.createElement('ul');
     ul.className = 'cal-tasks';
     rows.forEach(([x, late]) => ul.append(calDayRow(x, late)));
-    body.append(h, ul);
-  };
-  const untimed = items.filter(x => !x.task.time), timed = items.filter(x => x.task.time);
-  section(`Gecikmiş (${overdue.length})`, overdue.map(x => [x, true]), 'late');
-  section('Gün boyu', sortDay(untimed).map(x => [x, false]));
-  section('Saatli', sortDay(timed).map(x => [x, false]));
-  if (!items.length && !overdue.length) body.innerHTML = '<div class="cd-empty">Bu gün boş.<br><span class="muted">Aşağıdan görev ekleyebilirsin.</span></div>';
+    body.append(ul);
+  } else body.innerHTML = '<div class="cd-empty">Bu gün boş.<br><span class="muted">Aşağıdan görev ekleyebilirsin.</span></div>';
 
   box.querySelector('.cal-close').onclick = e => { e.stopPropagation(); closeCatPop(); closeCalDay(); };
   box.querySelectorAll('.cd-nav').forEach(b => b.onclick = () => openCalDay(addDays(calSelected, +b.dataset.d)));
@@ -285,7 +286,7 @@ function renderCalDay(byDue) {
   };
 }
 
-// Gün penceresindeki bir görev satırı: onay kutusu, saat (tıklayınca tarih/saat penceresi), metin, kategori, sil
+// Gün penceresindeki bir görev satırı: onay kutusu, metin, tekrar/zil simgeleri, saat (tıklayınca gün/saat/hatırlatıcı), kategori, sil
 function calDayRow({ cat, task }, late) {
   const li = document.createElement('li');
   li.className = (task.done ? 'done' : '') + (late ? ' late' : '');
@@ -294,10 +295,10 @@ function calDayRow({ cat, task }, late) {
   li.title = taskTitle(task).replace('\nDüzenlemek için tıkla', '') + '\n(Başka bir güne sürükleyebilirsin)';
   li.draggable = true;
   li.innerHTML = `<input type="checkbox" ${task.done ? 'checked' : ''}>`
-    + `<button type="button" class="cd-t${task.time ? '' : ' none'}" title="Gün / saat / hatırlatıcı">${task.time || ico('clock')}</button>`
     + `<span class="txt">${renderInline(task.text)}</span>`
     + (task.rec ? `<span class="rec" title="${esc(recLabel(task.rec))}">${ico('repeat')}</span>` : '')
     + (task.remind?.length ? `<span class="bell" title="Hatırlatıcı var">${ico('bell')}</span>` : '')
+    + `<button type="button" class="cd-t${task.time ? '' : ' none'}" title="Gün / saat / hatırlatıcı">${task.time || ico('clock')}</button>`
     + (late ? `<span class="late-tag">${dueInfo(task.due, false).label}</span>` : '')
     + `<span class="cat-tag">${cat.icon ? `<span class="cat-ico">${cat.icon}</span>` : '<span class="dot"></span>'}${esc(cat.name)}</span>`
     + '<button type="button" class="cd-del" title="Sil">✕</button>';
@@ -325,8 +326,8 @@ function renderCalTimeline(v, byDue) {
     days = Array.from({ length: 7 }, (_, i) => addDays(mon, i));
   }
   $('#calTitle').textContent = v === 'day'
-    ? fmtLongDay.format(parseISODate(calDate))
-    : `${fmtDayMonth.format(parseISODate(days[0]))} – ${fmtDayMonthYear.format(parseISODate(days[6]))}`;
+    ? `${fmtFullDay.format(parseISODate(calDate))} · ${isoWeek(parseISODate(calDate))}. hafta`
+    : `${isoWeek(parseISODate(days[0]))}. hafta · ${fmtDayMonth.format(parseISODate(days[0]))} – ${fmtDayMonthYear.format(parseISODate(days[6]))}`;
 
   // Çizelge günün tamamını (00:00–24:00) gösterir; alanda yukarı aşağı kaydırılır
   const lo = 0, hi = 24;
@@ -334,12 +335,24 @@ function renderCalTimeline(v, byDue) {
   const chipText = ({ task }) => `${task.time ? `<b>${task.time}</b> ` : ''}${esc(task.text)}`;
   const chipCls = (task, iso) => `${task.done ? ' done' : ''}${!task.done && iso < today ? ' late' : ''}`;
 
-  let head = '<div class="cal-tl-gutter"></div>', allday = `<div class="cal-tl-gutter cal-tl-lbl">${ico('sun')}<span>Gün boyu</span></div>`, cols = '';
+  // Gün başlıkları: sol sütunda hafta numarası; her günde gün adı, büyük gün numarası ve ay (ayın 1'inde / ilk sütunda vurgulu).
+  // Gün görünümünde tek geniş başlık: numara, tam gün adı, ay yıl ve Bugün/Yarın/Dün.
+  // "Gün boyu" şeridi: solda simge + etiket + açık görev sayısı; hücrede boş yere tıklamak görev ekler (üzerine gelince "Ekle" ipucu).
+  const fmtMon = new Intl.DateTimeFormat('tr-TR', { month: 'short' }), fmtMonLong = new Intl.DateTimeFormat('tr-TR', { month: 'long' });
+  const untimed = iso => (byDue.get(iso) || []).filter(x => !x.task.time).sort((a, b) => a.task.done - b.task.done);
+  const openAd = days.reduce((n, iso) => n + untimed(iso).filter(x => !x.task.done).length, 0);
+  let head = `<div class="cal-tl-gutter cal-tl-wk" title="${isoWeek(parseISODate(days[0]))}. hafta"><b>${isoWeek(parseISODate(days[0]))}</b><span>hafta</span></div>`;
+  let allday = `<div class="cal-tl-gutter cal-tl-lbl">${ico('sun')}<span>Gün boyu</span>${openAd ? `<em title="${openAd} açık görev">${openAd}</em>` : ''}</div>`, cols = '';
   days.forEach((iso, di) => {
     const d = parseISODate(iso), items = byDue.get(iso) || [];
     const we = (d.getDay() + 6) % 7 > 4;
-    head += `<button type="button" class="cal-col-head${iso === today ? ' today' : ''}${we ? ' we' : ''}${calDayOpen && iso === calSelected ? ' sel' : ''}" data-iso="${iso}"><span>${WEEKDAYS[(d.getDay() + 6) % 7]}</span><b>${d.getDate()}</b></button>`;
-    allday += `<div class="cal-ad" data-iso="${iso}">${items.filter(x => !x.task.time).sort((a, b) => a.task.done - b.task.done).map(({ cat, task }, k) => `<span class="cal-item cal-ad-item${chipCls(task, iso)}" draggable="true" data-iso="${iso}" data-k="${k}" style="--c:${catColor(cat)}"><i class="cal-chk" title="Tamamla / geri al">${ico('check')}</i><span class="cal-ad-t">${esc(task.text)}</span></span>`).join('')}</div>`;
+    const cls = `${iso === today ? ' today' : ''}${iso < today ? ' past' : ''}${we ? ' we' : ''}${calDayOpen && iso === calSelected ? ' sel' : ''}${d.getDate() === 1 || di === 0 ? ' m1' : ''}`;
+    const rel = { 0: 'Bugün', 1: 'Yarın', '-1': 'Dün' }[dayDiff(iso)];
+    head += v === 'day'
+      ? `<button type="button" class="cal-col-head cal-dh${cls}" data-iso="${iso}"><b class="ch-n">${d.getDate()}</b><span class="ch-info"><span class="ch-wd">${fmtWeekday.format(d)}</span><span class="ch-mon">${fmtMonth.format(d)}</span></span>${rel ? `<span class="ch-rel">${rel}</span>` : ''}</button>`
+      : `<button type="button" class="cal-col-head${cls}" data-iso="${iso}" title="${fmtFullDay.format(d)}"><span class="ch-wd">${WEEKDAYS[(d.getDay() + 6) % 7]}</span><span class="ch-date"><b class="ch-n">${d.getDate()}</b><span class="ch-mon">${(d.getDate() === 1 ? fmtMonLong : fmtMon).format(d)}</span></span></button>`;
+    const ad = untimed(iso);
+    allday += `<div class="cal-ad${ad.length ? '' : ' empty'}" data-iso="${iso}">${ad.map(({ cat, task }, k) => `<span class="cal-item cal-ad-item${chipCls(task, iso)}" draggable="true" data-iso="${iso}" data-k="${k}" style="--c:${catColor(cat)}" title="${esc(task.text)} · ${esc(cat.name)}"><i class="cal-chk" title="Tamamla / geri al">${ico('check')}</i><span class="cal-ad-t">${esc(task.text)}</span></span>`).join('')}<span class="cal-ad-add" title="Gün boyu görev ekle">${ico('plus')}<span>Ekle</span></span></div>`;
 
     // Saatli görevler: üst üste binenler yan yana
     const evs = items.filter(x => x.task.time).map(x => ({ ...x, start: timeMins(x.task) })).sort((a, b) => a.start - b.start);
@@ -404,6 +417,20 @@ function renderCalTimeline(v, byDue) {
     tl.querySelector(`.cal-col[data-iso="${col.dataset.iso}"]`)?.append(pick);
   }));
   // Bırakma: gün sütununa → gün (ve saat, 15 dk adımla); "Gün boyu" şeridine → gün, saatsiz
+  // "Gün boyu" şeridinin boş yerine tıklamak: o gün için saatsiz görev ekleme penceresini açar
+  tl.querySelectorAll('.cal-ad').forEach(ad => ad.addEventListener('click', e => {
+    if (e.target.closest('.cal-item')) return;
+    openCalDay(ad.dataset.iso, { at: { x: e.clientX, y: e.clientY } });
+  }));
+  // Bırakma: gün sütununa → gün ve saat (15 dk adımla, imlecin bulunduğu dilim); "Gün boyu" şeridine → gün, saatsiz.
+  // Sürüklerken yeni saat gölge blok ve etiketle önceden gösterilir.
+  const slotTime = (e, col) => {
+    const m = Math.max(0, Math.min(24 * 60 - 15, Math.floor(((e.clientY - col.getBoundingClientRect().top) / H * 60 + lo * 60) / 15) * 15));
+    return { m, time: `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}` };
+  };
+  const ghost = document.createElement('div');
+  ghost.className = 'cal-ghost';
+  const hideGhost = () => ghost.remove();
   const dropTargets = tl.querySelectorAll('.cal-col, .cal-ad');
   dropTargets.forEach(t => {
     t.addEventListener('dragover', e => {
@@ -411,19 +438,26 @@ function renderCalTimeline(v, byDue) {
       e.preventDefault();
       dropTargets.forEach(x => x !== t && x.classList.remove('drop-day'));
       t.classList.add('drop-day');
+      if (t.classList.contains('cal-col')) {
+        const { m, time } = slotTime(e, t);
+        ghost.style.top = `${(m - lo * 60) / 60 * H}px`;
+        ghost.style.height = `${H / 2 - 2}px`;
+        ghost.style.setProperty('--c', catColor(dragging.cat));
+        ghost.innerHTML = `<b>${time}</b> ${esc(dragging.task.text)}`;
+        if (ghost.parentElement !== t) t.append(ghost);
+      } else hideGhost();
     });
-    t.addEventListener('dragleave', e => { if (!t.contains(e.relatedTarget)) t.classList.remove('drop-day'); });
+    t.addEventListener('dragleave', e => { if (!t.contains(e.relatedTarget)) { t.classList.remove('drop-day'); hideGhost(); } });
     t.addEventListener('drop', e => {
       if (dragging?.type !== 'task') return;
       e.preventDefault();
       const { cat, task } = dragging;
       endDrag();
+      hideGhost();
       task.due = t.dataset.iso;
-      if (t.classList.contains('cal-col')) {
-        const m = Math.max(0, Math.min(24 * 60 - 15, Math.round(((e.clientY - t.getBoundingClientRect().top) / H * 60 + lo * 60) / 15) * 15));
-        task.time = `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-      } else delete task.time;
+      if (t.classList.contains('cal-col')) task.time = slotTime(e, t).time; else delete task.time;
       saveTodos();
     });
   });
+  document.addEventListener('dragend', hideGhost, { once: true });
 }
