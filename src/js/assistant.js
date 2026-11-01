@@ -243,7 +243,7 @@ function tasksContext(typedText) {
     for (const t of cat.tasks) {
       const id = `t${++n}`;
       ctxTasks.set(id, { cat, task: t });
-      lines.push(`[${id}] ${taskLine(t)}${t.assignee ? ` (atanan: ${memberName(cat, t.assignee)})` : ''}`);
+      lines.push(`[${id}] ${taskLine(t)}${t.assignees?.length ? ` (atananlar: ${t.assignees.map(e => memberName(cat, e)).join(', ')})` : ''}`);
     }
   }
   // Aynı sohbetten devam: son birkaç konuşma Gemini'ye de gider

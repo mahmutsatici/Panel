@@ -1,19 +1,27 @@
 // ============ Ortak kategoriler (bulut) ============
 // Ortak kategori, yerel kategorilerle aynı listede (todo.cats) durur ama kaynağı Firestore'dur; todo.md'ye yazılmaz.
 //   { name, tasks, hidden: [], shared: true, cid, sahip, uyeler, uyeAdlari, base: Map(görev id → imza) }
-// Görev nesneleri yerelkilerle aynı biçimde (done, text, due, rec, created, completed) + { id, createdBy, assignee, completedBy }.
+// Görev nesneleri yerelkilerle aynı biçimde (done, text, due, rec, created, completed, time, remind, priority, level) + { id, createdBy, assignees, completedBy, parentId }.
+// Alt görevler buluttaki "ust" alanıyla (üst görevin kimliği) tutulur; ekranda level ile sıralanır (sortSharedTree).
 // Yazma yolu: arayüz görevi her zamanki gibi değiştirir, saveTodos() → pushShared() imzası değişenleri buluta gönderir.
 // Okuma yolu: Firestore dinleyicileri görevleri bu nesnelere işler (applyTasks). Sıralama: oluşturma zamanı (yeni üstte).
 let sync = null;   // { email, unsubCats, taskUnsubs: Map(cid → unsub) } — yalnızca giriş yapılmış ve izinli hesapta
 
 const sharedCats = () => todo.cats.filter(c => c.shared);
 const sharedKey = cat => cat.shared ? `c:${cat.cid}` : `l:${cat.name}`;
-const sigOf = t => JSON.stringify([t.text, !!t.done, t.due || null, t.rec || null, t.assignee || null]);
+// Buluta giden alanlar (Firestore alan adlarıyla); imza değişimi hangi alanların gönderileceğini belirler
+const fieldsOf = (t, ust) => ({
+  metin: t.text, bitti: !!t.done, son: t.due || null, tekrar: t.rec || null, atananlar: t.assignees || [],
+  saat: t.time || null, hatirlat: t.remind || [], oncelik: t.priority || null, ust: ust || null,
+});
+const sigOf = (t, ust) => JSON.stringify(fieldsOf(t, ust));
+// Görevin üst görevi: listedeki konumundan (alt görev = üstündeki daha az girintili görev); üstü yüklenmemiş (yetim) görev eski üstünü korur
+const ustOf = (cat, t) => parentOf(cat.tasks, cat.tasks.indexOf(t))?.id || t.orphanOf || null;
 const stampOfMs = ms => ms == null ? undefined : new Date(ms).toLocaleString('sv-SE').slice(0, 16).replace(' ', 'T');
 // Kişisel istatistikler: başkasının tamamladığı ortak görev sayılmaz; başkasına atanmış açık görev de benim yükümde değildir
 const ownDone = t => !t.completedBy || !sync || t.completedBy === sync.email;
-const onMyPlate = t => !t.assignee || !sync || t.assignee === sync.email;
-const isMine = t => !!sync && t.assignee === sync.email;
+const onMyPlate = t => !t.assignees?.length || !sync || t.assignees.includes(sync.email);
+const isMine = t => !!sync && !!t.assignees?.includes(sync.email);
 const memberName = (cat, email) => cat.uyeAdlari[email] || email.split('@')[0];
 const isOwner = cat => !!sync && cat.sahip === sync.email;
 
@@ -21,17 +29,42 @@ function taskFromDoc(d) {
   return {
     id: d.id, done: d.bitti, text: d.metin, due: d.son || undefined, rec: d.tekrar || undefined,
     created: stampOfMs(d.olusturma), completed: d.bitti ? stampOfMs(d.bitirmeZamani) : undefined,
-    createdBy: d.olusturan, assignee: d.atanan || undefined, completedBy: d.bitiren || undefined,
+    createdBy: d.olusturan, completedBy: d.bitiren || undefined,
+    // eski belgelerde tek "atanan" vardı; yenilerde "atananlar" listesi (varsa o geçerli)
+    assignees: (d.atananlar ?? (d.atanan ? [d.atanan] : [])).length ? [...(d.atananlar ?? [d.atanan])] : undefined,
+    time: d.saat || undefined, remind: d.hatirlat?.length ? [...d.hatirlat] : undefined, priority: d.oncelik || undefined,
+    parentId: d.ust || undefined,
     ts: d.olusturma || Date.now(), doneTs: d.bitirmeZamani || 0,
   };
 }
-const sortShared = tasks => [
-  ...tasks.filter(t => !t.done).sort((a, b) => b.ts - a.ts),
-  ...tasks.filter(t => t.done).sort((a, b) => b.doneTs - a.doneTs),
-];
+// Sıralama: üst düzeyde oluşturma zamanı (yeni üstte, yapılanlar altta); alt görevler üstünün altında, oluşturma sırasıyla (yapılanlar altta)
+function sortSharedTree(tasks) {
+  const byId = new Map(tasks.filter(t => t.id).map(t => [t.id, t]));
+  const kids = new Map(), roots = [];
+  for (const t of tasks) {
+    const p = t.parentId && byId.get(t.parentId);
+    if (p && p !== t) { if (!kids.has(p)) kids.set(p, []); kids.get(p).push(t); delete t.orphanOf; }
+    else { roots.push(t); if (t.parentId) t.orphanOf = t.parentId; else delete t.orphanOf; }
+  }
+  const out = [], seen = new Set();
+  const walk = (t, level) => {
+    if (seen.has(t)) return;
+    seen.add(t);
+    if (level) t.level = level; else delete t.level;
+    out.push(t);
+    const c = kids.get(t) || [];
+    for (const k of [...c.filter(x => !x.done).sort((a, b) => a.ts - b.ts), ...c.filter(x => x.done).sort((a, b) => a.ts - b.ts)]) walk(k, Math.min(level + 1, MAX_LEVEL));
+  };
+  [...roots.filter(t => !t.done).sort((a, b) => b.ts - a.ts), ...roots.filter(t => t.done).sort((a, b) => b.doneTs - a.doneTs)].forEach(t => walk(t, 0));
+  tasks.forEach(t => walk(t, 0));   // üst görev döngüsü gibi beklenmedik durumda görev kaybolmasın
+  return out;
+}
 
 // Başka bir kategoriye sürüklenen görev (ortak ↔ yerel) taşınmaz, kopyalanır; kopya yeni bir görevdir
-const copyTask = t => ({ done: t.done, text: t.text, due: t.due, rec: t.rec, created: stampNow(), completed: t.completed });
+const copyTask = t => ({
+  done: t.done, text: t.text, due: t.due, rec: t.rec, time: t.time, remind: t.remind && [...t.remind], priority: t.priority,
+  ...(t.level ? { level: t.level } : {}), created: stampNow(), completed: t.completed,
+});
 
 // --- Yerleşim: ortak kategorinin listedeki yeri cihazda hatırlanır (todo.md yalnızca yerel olanları tutar) ---
 function placeShared(cat) {
@@ -119,17 +152,19 @@ function applyTasks(cid, docs) {
     const fresh = taskFromDoc(d);
     const t = known.get(d.id);
     // Başkası bana görev atadıysa (ilk yükleme dışında; kendi değişikliğim bellekte zaten işlenmiş olur) bildir
-    if (cat.loaded && !fresh.done && fresh.assignee === sync.email && (t ? t.assignee !== sync.email : fresh.createdBy !== sync.email)) {
+    if (cat.loaded && !fresh.done && fresh.assignees?.includes(sync.email) && (t ? !t.assignees?.includes(sync.email) : fresh.createdBy !== sync.email)) {
       notifyAssigned(cat, fresh);
     }
-    if (t) Object.assign(t, fresh);   // var olan nesne korunur (sürükleme/düzenleme referansları)
-    const task = t || fresh;
-    cat.base.set(task.id, sigOf(task));
-    return task;
+    // var olan nesne korunur (sürükleme/düzenleme referansları); belgede olmayan alanlar da temizlenir
+    if (t) for (const k of ['assignees', 'time', 'remind', 'priority', 'parentId', 'completedBy', 'due', 'rec', 'completed']) delete t[k];
+    if (t) Object.assign(t, fresh);
+    return t || fresh;
   });
   cat.loaded = true;
   // Henüz buluta gönderilmemiş (id'siz) görevler kalır
-  cat.tasks = sortShared([...cat.tasks.filter(t => !t.id), ...tasks]);
+  cat.tasks = sortSharedTree([...cat.tasks.filter(t => !t.id), ...tasks]);
+  // Konum belli olunca (üst görev + yetim bilgisi) bulutla aynı olan imzalar kaydedilir
+  for (const t of cat.tasks) if (t.id) cat.base.set(t.id, sigOf(t, ustOf(cat, t)));
   renderWhenIdle();
   writeSharedCopy();
 }
@@ -139,7 +174,7 @@ const writeSharedCopy = debounce(() => {
   if (!sync) return;
   const cats = sharedCats().map(c => ({
     ad: c.name, id: c.cid, sahip: c.sahip, uyeler: c.uyeler,
-    gorevler: c.tasks.map(t => ({ metin: t.text, bitti: t.done, son: t.due || null, tekrar: t.rec || null, atanan: t.assignee || null, olusturan: t.createdBy || null, bitiren: t.completedBy || null, eklendi: t.created || null, tamamlandi: t.completed || null })),
+    gorevler: c.tasks.map(t => ({ metin: t.text, bitti: t.done, seviye: t.level || 0, son: t.due || null, saat: t.time || null, tekrar: t.rec || null, atananlar: t.assignees || [], oncelik: t.priority || null, hatirlat: t.remind || [], olusturan: t.createdBy || null, bitiren: t.completedBy || null, eklendi: t.created || null, tamamlandi: t.completed || null })),
   }));
   api.todos.writeShared(JSON.stringify({ hesap: sync.email, kaydedildi: new Date().toISOString(), kategoriler: cats }, null, 1)).catch(console.error);
 }, 3000);
@@ -155,25 +190,27 @@ function pushShared() {
         t.id = cloud.newId();
         t.createdBy = me;
         t.ts = Date.now();
-        cat.base.set(t.id, sigOf(t));
+        const ust = ustOf(cat, t);
+        cat.base.set(t.id, sigOf(t, ust));
         cloud.createTask(cat.cid, t.id, {
-          metin: t.text, bitti: !!t.done, son: t.due || null, tekrar: t.rec || null, olusturan: me, atanan: t.assignee || null,
+          ...fieldsOf(t, ust), olusturan: me, atanan: null,
           bitiren: t.done ? me : null, bitirmeZamani: t.done ? cloud.now() : null, silindi: false, silenKisi: null,
         }).catch(syncError);
         if (t.done) { t.completedBy = me; t.doneTs = Date.now(); }
-      } else if (cat.base.get(t.id) !== sigOf(t)) {
-        const was = JSON.parse(cat.base.get(t.id) || '[]');
+      } else if (cat.base.get(t.id) !== sigOf(t, ustOf(cat, t))) {
+        const was = JSON.parse(cat.base.get(t.id) || '{}');
         // Yalnızca değişen alanlar gönderilir: başkasının aynı anda başka bir alanda yaptığı değişiklik ezilmesin
-        const now = [t.text, !!t.done, t.due || null, t.rec || null, t.assignee || null];
+        const ust = ustOf(cat, t), now = fieldsOf(t, ust);
         const patch = {};
-        ['metin', 'bitti', 'son', 'tekrar', 'atanan'].forEach((k, i) => { if (was[i] !== now[i]) patch[k] = now[i]; });
-        if (!!was[1] !== !!t.done) {
+        for (const k of Object.keys(now)) if (JSON.stringify(was[k]) !== JSON.stringify(now[k])) patch[k] = now[k];
+        if ('atananlar' in patch) patch.atanan = null;   // eski tek atanan alanı artık kullanılmaz
+        if (!!was.bitti !== !!t.done) {
           patch.bitiren = t.done ? me : null;
           patch.bitirmeZamani = t.done ? cloud.now() : null;
           t.completedBy = t.done ? me : undefined;
           t.doneTs = t.done ? Date.now() : 0;
         }
-        cat.base.set(t.id, sigOf(t));
+        cat.base.set(t.id, sigOf(t, ust));
         cloud.updateTask(cat.cid, t.id, patch).catch(syncError);
       }
       live.add(t.id);
@@ -219,22 +256,31 @@ cloud.onChange(user => {
 });
 
 // ============ Atama ============
+// Birden fazla kişi atanabilir: düğmede ilk üçünün baş harfi (fazlası "+N"), ipucunda tüm adlar
 const assigneeButtonHtml = (cat, task) => {
-  if (!task.assignee) return '<button class="asg none" title="Birine ata">＋</button>';
-  const me = task.assignee === sync?.email;
-  const name = memberName(cat, task.assignee);
-  return `<button class="asg set${me ? ' me' : ''}" title="Atanan: ${esc(name)}">${esc(name.charAt(0).toLocaleUpperCase('tr'))}</button>`;
+  const list = task.assignees || [];
+  if (!list.length) return '<button class="asg none" title="Birine ata">＋</button>';
+  const me = list.includes(sync?.email);
+  const ini = e => esc(memberName(cat, e).charAt(0).toLocaleUpperCase('tr'));
+  return `<button class="asg set${me ? ' me' : ''}" title="Atananlar: ${esc(list.map(e => memberName(cat, e)).join(', '))}">${list.slice(0, 3).map(ini).join('')}${list.length > 3 ? `+${list.length - 3}` : ''}</button>`;
 };
 const assignPop = $('#assignPop');
 function closeAssignPop() { assignPop.hidden = true; }
+// Çoklu seçim: her üyeye tıklamak atamayı açıp kapatır; pencere açık kalır ("Temizle" hepsini kaldırır)
 function pickAssignee(anchor, cat, task) {
-  const opts = [['', 'Atanmamış'], ...cat.uyeler.map(e => [e, e === sync.email ? `${memberName(cat, e)} (ben)` : memberName(cat, e)])];
-  assignPop.innerHTML = opts.map(([e, label]) => `<button type="button" data-e="${esc(e)}" class="${(task.assignee || '') === e ? 'on' : ''}">${esc(label)}</button>`).join('');
-  assignPop.querySelectorAll('button').forEach(b => b.onclick = () => {
-    closeAssignPop();
-    task.assignee = b.dataset.e || undefined;
-    saveTodos();
-  });
+  const draw = () => {
+    const sel = new Set(task.assignees || []);
+    assignPop.innerHTML = cat.uyeler.map(e => `<button type="button" data-e="${esc(e)}" class="${sel.has(e) ? 'on' : ''}"><span class="chk">${sel.has(e) ? '✓' : ''}</span>${esc(e === sync.email ? `${memberName(cat, e)} (ben)` : memberName(cat, e))}</button>`).join('')
+      + (sel.size ? '<button type="button" data-clear class="clear">Atamaları temizle</button>' : '');
+    assignPop.querySelectorAll('[data-e]').forEach(b => b.onclick = () => {
+      sel.has(b.dataset.e) ? sel.delete(b.dataset.e) : sel.add(b.dataset.e);
+      task.assignees = sel.size ? cat.uyeler.filter(e => sel.has(e)) : undefined;
+      saveTodos();   // liste yeniden çizilir; pencere açık kalır ve güncel hali gösterir
+      draw();
+    });
+    assignPop.querySelector('[data-clear]')?.addEventListener('click', () => { task.assignees = undefined; saveTodos(); closeAssignPop(); });
+  };
+  draw();
   assignPop.hidden = false;
   const r = anchor.getBoundingClientRect(), w = assignPop.offsetWidth, h = assignPop.offsetHeight;
   assignPop.style.left = `${Math.min(Math.max(8, r.left), innerWidth - w - 8)}px`;

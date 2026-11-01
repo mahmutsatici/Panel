@@ -8,7 +8,7 @@ import {
 import {
   initializeFirestore, persistentLocalCache, persistentSingleTabManager, connectFirestoreEmulator,
   collection, doc, query, where, onSnapshot, getDoc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch,
-  serverTimestamp, Timestamp,
+  serverTimestamp, Timestamp, arrayRemove,
 } from 'firebase/firestore';
 
 window.CloudSDK = {
@@ -17,5 +17,5 @@ window.CloudSDK = {
   signInWithEmailAndPassword, signOut, sendPasswordResetEmail,
   initializeFirestore, persistentLocalCache, persistentSingleTabManager, connectFirestoreEmulator,
   collection, doc, query, where, onSnapshot, getDoc, getDocs, setDoc, updateDoc, deleteDoc, writeBatch,
-  serverTimestamp, Timestamp,
+  serverTimestamp, Timestamp, arrayRemove,
 };

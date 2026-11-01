@@ -349,12 +349,10 @@ function renderCalTimeline(v, byDue) {
       const { cat, task } = dragging;
       endDrag();
       task.due = t.dataset.iso;
-      if (!cat.shared) {
-        if (t.classList.contains('cal-col')) {
-          const m = Math.max(0, Math.min(24 * 60 - 15, Math.round(((e.clientY - t.getBoundingClientRect().top) / H * 60 + lo * 60) / 15) * 15));
-          task.time = `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-        } else delete task.time;
-      }
+      if (t.classList.contains('cal-col')) {
+        const m = Math.max(0, Math.min(24 * 60 - 15, Math.round(((e.clientY - t.getBoundingClientRect().top) / H * 60 + lo * 60) / 15) * 15));
+        task.time = `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+      } else delete task.time;
       saveTodos();
     });
   });

@@ -101,13 +101,20 @@ service cloud.firestore {
         function cat() { return get(/databases/$(database)/documents/categories/$(cid)).data; }
         function member() { return activeUser() && me() in cat().uyeler; }
         function validTask(d) {
+          // atananlar (liste), ust (alt görevin üst görev kimliği), saat, hatirlat, oncelik: sonradan eklenen alanlar; eski belgelerde yoktur (get ile okunur)
           return d.keys().hasOnly(['metin', 'bitti', 'son', 'tekrar', 'olusturan', 'atanan', 'olusturma',
-                                    'bitirmeZamani', 'bitiren', 'silindi', 'silenKisi', 'guncelleme'])
+                                    'bitirmeZamani', 'bitiren', 'silindi', 'silenKisi', 'guncelleme',
+                                    'atananlar', 'ust', 'saat', 'hatirlat', 'oncelik'])
             && d.metin is string && d.metin.size() > 0 && d.metin.size() <= 500
             && d.bitti is bool && d.silindi is bool
             && (d.son == null || (d.son is string && d.son.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')))
             && (d.tekrar == null || (d.tekrar is string && d.tekrar.size() <= 40))
             && (d.atanan == null || d.atanan in cat().uyeler)
+            && (d.get('atananlar', null) == null || (d.atananlar is list && d.atananlar.size() <= 20 && d.atananlar.hasOnly(cat().uyeler)))
+            && (d.get('ust', null) == null || (d.ust is string && d.ust.size() <= 40))
+            && (d.get('saat', null) == null || (d.saat is string && d.saat.matches('^[0-9]{2}:[0-9]{2}$')))
+            && (d.get('hatirlat', null) == null || (d.hatirlat is list && d.hatirlat.size() <= 10))
+            && (d.get('oncelik', null) == null || (d.oncelik is int && d.oncelik >= 0 && d.oncelik <= 3))
             && (d.bitiren == null || d.bitiren in cat().uyeler)
             && (d.bitti == true || d.bitiren == null)
             && d.guncelleme == request.time;

@@ -173,6 +173,19 @@ describe('görev', () => {
     await assertSucceeds(setDoc(doc(f, 'categories/k1/tasks', 'a'), task({ atanan: VELI.email })));
     await assertFails(setDoc(doc(f, 'categories/k1/tasks', 'b'), task({ atanan: CAN.email })));
   });
+  test('çoklu atama, alt görev, saat, hatırlatıcı ve öncelik alanları doğrulanır', async () => {
+    const f = db(ALI);
+    await assertSucceeds(setDoc(doc(f, 'categories/k1/tasks', 'a'), task({ atananlar: [ALI.email, VELI.email], ust: 't1', saat: '14:30', hatirlat: ['0dk', '15dk'], oncelik: 3 })));
+    await assertFails(setDoc(doc(f, 'categories/k1/tasks', 'b'), task({ atananlar: [ALI.email, CAN.email] })));          // üye olmayan atanamaz
+    await assertFails(setDoc(doc(f, 'categories/k1/tasks', 'c'), task({ atananlar: 'ali@x.com' })));                      // liste olmalı
+    await assertFails(setDoc(doc(f, 'categories/k1/tasks', 'd'), task({ saat: '2:30' })));
+    await assertFails(setDoc(doc(f, 'categories/k1/tasks', 'e'), task({ oncelik: 4 })));
+    await assertFails(setDoc(doc(f, 'categories/k1/tasks', 'g'), task({ hatirlat: Array(11).fill('0dk') })));
+    await assertFails(setDoc(doc(f, 'categories/k1/tasks', 'h'), task({ ust: 'x'.repeat(41) })));
+    // eski belge (yeni alanlar yok) yeni alanla güncellenebilir
+    await assertSucceeds(updateDoc(doc(db(VELI), 'categories/k1/tasks/t1'), { atananlar: [VELI.email], atanan: null, guncelleme: serverTimestamp() }));
+    await assertFails(updateDoc(doc(db(VELI), 'categories/k1/tasks/t1'), { atananlar: [CAN.email], guncelleme: serverTimestamp() }));
+  });
   test('herhangi bir üye görevi günceller, tamamlar ve yumuşak siler; oluşturan/oluşturma değişmez', async () => {
     const t = doc(db(VELI), 'categories/k1/tasks/t1');
     await assertSucceeds(updateDoc(t, { bitti: true, bitiren: VELI.email, bitirmeZamani: serverTimestamp(), guncelleme: serverTimestamp() }));

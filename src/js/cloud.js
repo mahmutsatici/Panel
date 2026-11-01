@@ -188,12 +188,13 @@ cloud.setMembers = (cid, uyeler, uyeAdlari) => (cloud.count(0, 1), fsd().updateD
 // bu yüzden önce o kişinin atamaları ve "bitiren" izi görevlerden temizlenir (kişi hâlâ üyeyken), sonra listeden çıkarılır.
 cloud.removeMember = async (cid, email, uyeler, uyeAdlari) => {
   const col = fsd().collection(cloud.db, 'categories', cid, 'tasks');
-  for (const field of ['atanan', 'bitiren']) {
-    const snap = await fsd().getDocs(fsd().query(col, fsd().where(field, '==', email)));
+  for (const field of ['atanan', 'bitiren', 'atananlar']) {
+    const list = field === 'atananlar';
+    const snap = await fsd().getDocs(fsd().query(col, fsd().where(field, list ? 'array-contains' : '==', email)));
     cloud.count(snap.docs.length, snap.docs.length);
     for (let i = 0; i < snap.docs.length; i += 400) {
       const batch = fsd().writeBatch(cloud.db);
-      snap.docs.slice(i, i + 400).forEach(d => batch.update(d.ref, { [field]: null, guncelleme: cloud.now() }));
+      snap.docs.slice(i, i + 400).forEach(d => batch.update(d.ref, { [field]: list ? fsd().arrayRemove(email) : null, guncelleme: cloud.now() }));
       await batch.commit();
     }
   }
