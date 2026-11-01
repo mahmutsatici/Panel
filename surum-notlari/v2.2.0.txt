@@ -1,0 +1,12 @@
+Panel 2.2.0 — Takvim ve görünüm iyileştirmeleri
+===============================================
+
+• Takvim (Hafta/Gün): çizelgede boş bir saate tıklayınca o gün ve saat dolu olarak görev ekleme penceresi açılır (15 dakikalık adımlar).
+• Gün penceresi yenilendi (ay, hafta, gün ve küçük/büyük ekranda): üstte ‹ › ile günler arası geçiş ve özet, ortada görevler (Gecikmiş / Gün boyu / Saatli),
+  altta ekleme formu: görev + ⏰ saat düğmesi + kategori seçimi. Görev satırındaki saate tıklayınca gün/saat/hatırlatıcı değişir; üzerine gelince ✕ ile silinir.
+• Tarih / saat / hatırlatıcı penceresi: Saat, Hatırlatıcı ve Tekrar açılır bölümler olarak toplandı (başlıkta mevcut değer görünür), "Tamam" düğmesi eklendi.
+  Saat seçimi 24 saat düğmesi + 00/15/30/45 dakika düğmeleriyle; gün seçince pencere, bu bölümlerden biri açıksa açık kalır.
+• Yapılacaklar tam ekran: varsayılan görünüm Liste. Pano artık sütun sayısı seçilebilen (otomatik / 2 / 3 / 4) gerçek bir pano:
+  gün / öncelik / tamamlanma gruplarında görevi başka sütuna sürüklemek tarihini / önceliğini / durumunu değiştirir.
+• Ana sayfadaki küçük Yapılacaklar kartı da liste düzeninde: kategoriler belirgin başlıklarla ayrılır.
+• Kategori simgesi: kategori başlığındaki ☺ düğmesiyle emoji seçilir (todo.md'de başlığın yanında görünmez bir işaret olarak durur; ortak kategorilerde yalnızca bu cihazda saklanır).

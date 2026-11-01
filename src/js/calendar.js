@@ -8,6 +8,8 @@ let calMonth = (() => { const d = new Date(); return new Date(d.getFullYear(), d
 let calSelected = todayISO();
 let calDayOpen = false;   // seçili günün görev penceresi açık mı
 let calAddCat = null;     // gün penceresinden eklenecek görevin kategorisi
+let calAddTime = null;    // gün penceresinden eklenecek görevin saati (çizelgede boş bir saate tıklanınca dolar)
+let calAnchorPt = null;   // çizelgede tıklanan nokta {x, y}: gün penceresi buraya yakın açılır
 let calView = store.get('calView', 'month');   // 'month' | 'week' | 'day'; hafta ve gün yalnızca tam ekranda
 let calDate = todayISO();                      // hafta/gün görünümünün gösterdiği gün
 const activeCalView = () => (document.body.classList.contains('solo') ? calView : 'month');
@@ -28,23 +30,32 @@ function closeCalDay() {
   if (!calDayOpen) return;
   calDayOpen = false;
   $('#calDay').hidden = true;
-  document.querySelectorAll('.cal-d.sel, .cal-col-head.sel').forEach(c => c.classList.remove('sel'));   // pencere kapanınca seçim işareti de kalkar
+  calAnchorPt = null;
+  calAddTime = null;
+  document.querySelectorAll('.cal-d.sel, .cal-col-head.sel').forEach(c => c.classList.remove('sel'));
+  document.querySelectorAll('.cal-pick').forEach(c => c.remove());   // pencere kapanınca seçim işareti de kalkar
 }
 // Pencere dışına tıklayınca / Esc ile kapansın
 document.addEventListener('mousedown', e => {
-  if (calDayOpen && !e.target.closest('#calDay, .cal-d, .cal-col-head, .cal-ev, .cal-ad, #datePop')) closeCalDay();
+  if (calDayOpen && !e.target.closest('#calDay, .cal-d, .cal-col, .cal-col-head, .cal-ad, #datePop, #timePop')) closeCalDay();
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCalDay(); });
 window.addEventListener('resize', () => calDayOpen && positionCalDay());
 
-// Pencereyi seçili günün hücresinin altına (yer yoksa üstüne) yerleştir
+// Pencereyi seçili günün hücresinin (çizelgede tıklanan noktanın) altına, yer yoksa üstüne yerleştir
 function positionCalDay() {
   const box = $('#calDay');
-  const cell = document.querySelector(`.cal-d[data-iso="${calSelected}"], .cal-col-head[data-iso="${calSelected}"]`);
-  const card = cell?.closest('.card');
-  if (!cell || !card || card.hidden) return closeCalDay();
-  const c = card.getBoundingClientRect(), r = cell.getBoundingClientRect();
-  const width = Math.max(280, Math.min(380, c.width - 16));
+  let r, card;
+  if (calAnchorPt) {
+    r = { left: calAnchorPt.x, top: calAnchorPt.y, bottom: calAnchorPt.y + 4, width: 0 };
+    card = true;
+  } else {
+    const cell = document.querySelector(`.cal-d[data-iso="${calSelected}"], .cal-col-head[data-iso="${calSelected}"]`);
+    card = cell?.closest('.card');
+    if (!cell || !card || card.hidden) return closeCalDay();
+    r = cell.getBoundingClientRect();
+  }
+  const width = Math.min(400, innerWidth - 16);
   box.style.width = `${width}px`;
   box.style.left = `${Math.min(Math.max(8, r.left + r.width / 2 - width / 2), innerWidth - width - 8)}px`;
   const h = box.offsetHeight;
@@ -167,15 +178,21 @@ function renderCalendar() {
 
 // Takvimde bir günü seçip gün penceresini açar. Hücreye tıklamanın yanı sıra sesli asistanın
 // "highlight_date" ile bir cevabı görsel olarak göstermesi için de kullanılır.
-function openCalDay(iso) {
+// opts.time: eklenecek görevin saati · opts.at: {x, y} pencerenin açılacağı nokta (çizelgede boş saate tıklama)
+function openCalDay(iso, opts = {}) {
   calSelected = iso;
   calDayOpen = true;
+  calAddTime = opts.time || null;
+  calAnchorPt = opts.at || null;
+  calDate = iso;
   const d = parseISODate(iso);
   if (d.getMonth() !== calMonth.getMonth()) calMonth = new Date(d.getFullYear(), d.getMonth(), 1);
   renderCalendar();
+  if (opts.at) $('#calDay .cd-add input')?.focus();
 }
 
-// Seçili günün görevleri (+ bugün seçiliyse gecikmiş görevler)
+// Gün penceresi: üstte gün (‹ › ile günler arası geçiş), ortada görevler (Gecikmiş / Gün boyu / saate göre),
+// altta ekleme formu (görev + saat + kategori). Çizelgede boş bir saate tıklanınca saat dolu gelir.
 function renderCalDay(byDue) {
   const box = $('#calDay');
   const items = byDue.get(calSelected) || [];
@@ -184,73 +201,94 @@ function renderCalDay(byDue) {
     ? allTasks().filter(x => x.task.due && x.task.due < today && !x.task.done)
     : [];
   const diff = dayDiff(calSelected);
-  const rel = diff === 0 ? ' · Bugün' : diff === 1 ? ' · Yarın' : diff === -1 ? ' · Dün' : '';
+  const rel = diff === 0 ? 'Bugün' : diff === 1 ? 'Yarın' : diff === -1 ? 'Dün' : '';
+  const open = items.filter(x => !x.task.done).length;
+  const cats = activeCats();
+  if (!cats.some(c => c.name === calAddCat)) calAddCat = currentCat().name;
 
   box.hidden = false;
   box.innerHTML = `
-    <div class="cal-day-head"><b>${fmtLongDay.format(parseISODate(calSelected))}</b><span class="muted">${rel}</span>
-      <button type="button" class="icon-btn cal-close" title="Kapat (Esc)">✕</button></div>
-    <ul class="cal-tasks"></ul>
-    <form class="cal-add">
-      <div class="cal-cats"><span class="muted">Kategori</span></div>
-      <input placeholder="Bu güne görev ekle… (Enter)" autocomplete="off">
+    <div class="cd-head">
+      <button type="button" class="cd-nav" data-d="-1" title="Önceki gün">‹</button>
+      <div class="cd-title"><b>${fmtLongDay.format(parseISODate(calSelected))}</b>
+        <span class="muted">${[rel, items.length ? `${open} açık / ${items.length} görev` : 'görev yok'].filter(Boolean).join(' · ')}</span></div>
+      <button type="button" class="cd-nav" data-d="1" title="Sonraki gün">›</button>
+      <button type="button" class="icon-btn cal-close" title="Kapat (Esc)">✕</button>
+    </div>
+    <div class="cd-body"></div>
+    <form class="cd-add">
+      <input placeholder="Görev ekle…  (örn. 15:30 toplantı)" autocomplete="off">
+      <div class="cd-opts">
+        <button type="button" class="cd-timebtn${calAddTime ? ' on' : ''}" title="Saat seç (15 dakikalık adımlar)">⏰ ${calAddTime || 'Saat'}</button>
+        <select class="cd-cat" title="Kategori">${cats.map(c => `<option value="${esc(c.name)}"${c.name === calAddCat ? ' selected' : ''}>${esc(c.name)}${c.shared ? ' 👥' : ''}</option>`).join('')}</select>
+        <button type="submit" class="cd-submit">Ekle</button>
+      </div>
     </form>`;
 
-  // Eklenecek görevin kategorisi: küçük seçim düğmeleri (varsayılan: formda seçili kategori)
-  const cats = activeCats();
-  if (!cats.some(c => c.name === calAddCat)) calAddCat = currentCat().name;
-  const catBox = box.querySelector('.cal-cats');
-  for (const c of cats) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'cal-cat' + (c.name === calAddCat ? ' on' : '');
-    b.style.setProperty('--c', catColor(c));
-    b.innerHTML = '<span class="dot"></span><span></span>';
-    b.lastChild.textContent = c.name;
-    b.onclick = () => {
-      calAddCat = c.name;
-      catBox.querySelectorAll('.cal-cat').forEach(x => x.classList.toggle('on', x === b));
-      box.querySelector('.cal-add input').focus();
-    };
-    catBox.append(b);
-  }
-
-  const ul = box.querySelector('ul');
-  const row = ({ cat, task }, late) => {
-    const li = document.createElement('li');
-    li.className = (task.done ? 'done' : '') + (late ? ' late' : '');
-    li.style.setProperty('--c', catColor(cat));
-    li.title = taskTitle(task).replace('\nDüzenlemek için tıkla', '') + '\n(Başka bir güne sürükleyebilirsin)';
-    li.draggable = true;
-    li.innerHTML = `<input type="checkbox" ${task.done ? 'checked' : ''}>${task.time ? `<span class="time">${task.time}</span>` : ''}<span class="txt">${renderInline(task.text)}</span>`
-      + (task.rec ? `<span class="rec" title="${esc(recLabel(task.rec))}">↻</span>` : '')
-      + (late ? `<span class="late-tag">${dueInfo(task.due, false).label}</span>` : '')
-      + `<span class="cat-tag"><span class="dot"></span>${esc(cat.name)}</span>`;
-    li.querySelector('input').onchange = e => setDone(cat, task, e.target.checked);
-    li.addEventListener('dragstart', e => { dragging = { type: 'task', cat, task }; e.dataTransfer.effectAllowed = 'move'; li.classList.add('dragging'); });
-    li.addEventListener('dragend', endDrag);
-    ul.append(li);
+  const body = box.querySelector('.cd-body');
+  const section = (title, rows, cls = '') => {
+    if (!rows.length) return;
+    const h = document.createElement('div');
+    h.className = `cd-sec ${cls}`;
+    h.textContent = title;
+    const ul = document.createElement('ul');
+    ul.className = 'cal-tasks';
+    rows.forEach(([x, late]) => ul.append(calDayRow(x, late)));
+    body.append(h, ul);
   };
-  if (overdue.length) {
-    ul.insertAdjacentHTML('beforeend', `<li class="sub">Gecikmiş (${overdue.length})</li>`);
-    overdue.forEach(x => row(x, true));
-    if (items.length) ul.insertAdjacentHTML('beforeend', '<li class="sub">Bugün</li>');
-  }
-  sortDay(items).forEach(x => row(x, false));
-  if (!items.length && !overdue.length) ul.innerHTML = '<li class="empty-day">Bu güne ait görev yok</li>';
+  const untimed = items.filter(x => !x.task.time), timed = items.filter(x => x.task.time);
+  section(`Gecikmiş (${overdue.length})`, overdue.map(x => [x, true]), 'late');
+  section('Gün boyu', sortDay(untimed).map(x => [x, false]));
+  section('Saatli', sortDay(timed).map(x => [x, false]));
+  if (!items.length && !overdue.length) body.innerHTML = '<div class="cd-empty">Bu gün boş.<br><span class="muted">Aşağıdan görev ekleyebilirsin.</span></div>';
 
   box.querySelector('.cal-close').onclick = closeCalDay;
+  box.querySelectorAll('.cd-nav').forEach(b => b.onclick = () => openCalDay(addDays(calSelected, +b.dataset.d)));
+  const form = box.querySelector('.cd-add'), input = form.querySelector('input');
+  form.querySelector('.cd-cat').onchange = e => { calAddCat = e.target.value; input.focus(); };
+  const timeBtn = form.querySelector('.cd-timebtn');
+  timeBtn.onclick = () => pickTime(timeBtn, calAddTime, t => {
+    calAddTime = t;
+    timeBtn.textContent = `⏰ ${t || 'Saat'}`;
+    timeBtn.classList.toggle('on', !!t);
+  });
   positionCalDay();
-  box.querySelector('.cal-add').onsubmit = e => {
+  form.onsubmit = e => {
     e.preventDefault();
-    const input = e.target.querySelector('input');
     const parsed = parseTaskBody(input.value.trim());
-    const nl = parseNatural(parsed.text);   // "her hafta" gibi tekrar ifadeleri de tanınsın
+    const nl = parseNatural(parsed.text);   // "her hafta", "15:30" gibi ifadeler de tanınsın
     const text = nl.text || parsed.text;
     if (!text) return;
     const cat = activeCats().find(c => c.name === calAddCat) || currentCat();
-    addTask(cat, text, calSelected, parsed.rec || nl.rec, parsed.time || nl.time).then(() => $('#calDay .cal-add input')?.focus());
+    const time = parsed.time || nl.time || calAddTime;
+    calAddTime = null;
+    addTask(cat, text, calSelected, parsed.rec || nl.rec, time, { priority: parsed.priority, remind: parsed.remind }).then(() => $('#calDay .cd-add input')?.focus());
   };
+}
+
+// Gün penceresindeki bir görev satırı: onay kutusu, saat (tıklayınca tarih/saat penceresi), metin, kategori, sil
+function calDayRow({ cat, task }, late) {
+  const li = document.createElement('li');
+  li.className = (task.done ? 'done' : '') + (late ? ' late' : '');
+  li.style.setProperty('--c', catColor(cat));
+  if (task.priority) li.dataset.p = task.priority;
+  li.title = taskTitle(task).replace('\nDüzenlemek için tıkla', '') + '\n(Başka bir güne sürükleyebilirsin)';
+  li.draggable = true;
+  li.innerHTML = `<input type="checkbox" ${task.done ? 'checked' : ''}>`
+    + `<button type="button" class="cd-t${task.time ? '' : ' none'}" title="Gün / saat / hatırlatıcı">${task.time || '⏰'}</button>`
+    + `<span class="txt">${renderInline(task.text)}</span>`
+    + (task.rec ? `<span class="rec" title="${esc(recLabel(task.rec))}">↻</span>` : '')
+    + (task.remind?.length ? '<span class="bell" title="Hatırlatıcı var">🔔</span>' : '')
+    + (late ? `<span class="late-tag">${dueInfo(task.due, false).label}</span>` : '')
+    + `<span class="cat-tag">${cat.icon ? `<span class="cat-ico">${cat.icon}</span>` : '<span class="dot"></span>'}${esc(cat.name)}</span>`
+    + '<button type="button" class="cd-del" title="Sil">✕</button>';
+  li.querySelector('input').onchange = e => setDone(cat, task, e.target.checked);
+  const tb = li.querySelector('.cd-t');
+  tb.onclick = () => pickDate(tb, { due: task.due, rec: task.rec, time: task.time, remind: task.remind }, v => setDueRec(task, v));
+  li.querySelector('.cd-del').onclick = () => { deleteTask(cat, task); saveTodos(); };
+  li.addEventListener('dragstart', e => { dragging = { type: 'task', cat, task }; e.dataTransfer.effectAllowed = 'move'; li.classList.add('dragging'); });
+  li.addEventListener('dragend', endDrag);
+  return li;
 }
 
 // ============ Hafta / Gün görünümü (tam ekran) ============
@@ -333,6 +371,19 @@ function renderCalTimeline(v, byDue) {
     if (calDayOpen && calSelected === b.dataset.iso) return closeCalDay();
     openCalDay(b.dataset.iso);
   });
+  // Boş bir saate tıklamak: o gün ve saat (15 dk adımla) dolu olarak görev ekleme penceresini açar
+  tl.querySelectorAll('.cal-col').forEach(col => col.addEventListener('click', e => {
+    if (e.target.closest('.cal-ev')) return;
+    const mins = Math.max(0, Math.min(24 * 60 - 15, Math.floor(((e.clientY - col.getBoundingClientRect().top) / H * 60 + lo * 60) / 15) * 15));
+    const time = `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+    openCalDay(col.dataset.iso, { time, at: { x: e.clientX, y: e.clientY } });
+    document.querySelectorAll('.cal-pick').forEach(c => c.remove());
+    const pick = document.createElement('div');
+    pick.className = 'cal-pick';
+    pick.style.cssText = `top:${(mins - lo * 60) / 60 * H}px;height:${H / 4}px`;
+    pick.textContent = time;
+    tl.querySelector(`.cal-col[data-iso="${col.dataset.iso}"]`)?.append(pick);
+  }));
   // Bırakma: gün sütununa → gün (ve saat, 15 dk adımla); "Gün boyu" şeridine → gün, saatsiz
   const dropTargets = tl.querySelectorAll('.cal-col, .cal-ad');
   dropTargets.forEach(t => {

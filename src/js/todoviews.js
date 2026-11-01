@@ -2,7 +2,8 @@
 // Tam ekranda iki ayar vardır: görünüm biçimi (Kart / Liste / Pano) ve gruplama (kategori / gün / öncelik / tamamlanma).
 // Kategoriye göre gruplama her zaman kategori kartlarının kendi çizimidir (sürükle-bırak, yeniden adlandırma...); biçim yalnızca yerleşimi değiştirir.
 // Diğer gruplamalar tüm görevleri düz listede toplayıp gruplar (alt görevler üst görevin adıyla gösterilir).
-let todoMode = store.get('todoMode', 'card');    // 'card' | 'list' | 'board'
+let todoMode = store.get('todoMode', 'list');    // 'card' | 'list' | 'board'
+let todoCols = store.get('todoCols', 'auto');    // pano sütun sayısı: 'auto' | '2' | '3' | '4'
 let todoGroup = store.get('todoGroup', 'cat');   // 'cat' | 'day' | 'prio' | 'done'
 const soloTodos = () => document.body.classList.contains('solo');
 const categoryCards = () => !soloTodos() || todoGroup === 'cat';
@@ -10,7 +11,13 @@ const categoryCards = () => !soloTodos() || todoGroup === 'cat';
 function syncTodoToolbar() {
   $('#todoViews').querySelectorAll('[data-m]').forEach(b => b.classList.toggle('on', b.dataset.m === todoMode));
   $('#todoGroup').value = todoGroup;
-  $('#todoList').dataset.mode = soloTodos() ? todoMode : '';
+  $('#todoCols').value = todoCols;
+  $('#todoCols').hidden = todoMode !== 'board';
+  const list = $('#todoList');
+  list.dataset.mode = soloTodos() ? todoMode : '';
+  // Pano sütun sayısı: otomatikte grup sayısı kadar (2–4)
+  const groups = todoGroup === 'cat' ? activeCats().length : 4;
+  list.style.setProperty('--tv-cols', todoCols === 'auto' ? Math.max(2, Math.min(4, groups)) : todoCols);
 }
 $('#todoViews').addEventListener('click', e => {
   const b = e.target.closest('[data-m]');
@@ -19,6 +26,7 @@ $('#todoViews').addEventListener('click', e => {
   store.set('todoMode', todoMode);
   renderTodos();
 });
+$('#todoCols').onchange = e => { todoCols = e.target.value; store.set('todoCols', todoCols); renderTodos(); };
 $('#todoGroup').onchange = e => { todoGroup = e.target.value; store.set('todoGroup', todoGroup); renderTodos(); };
 
 // Gruplama tanımları: her görevi bir gruba koyar; gruplar sırayla çizilir
@@ -74,7 +82,8 @@ function renderGrouped(root) {
 
   defs.forEach(([label, color], i) => {
     const rows = buckets[i].sort(cmpTasks);
-    if (!rows.length) return;
+    const board = soloTodos() && todoMode === 'board';
+    if (!rows.length && !board) return;   // panoda boş gruplar da görünür (görevi oraya sürükleyebilmek için)
     const key = `tv:${todoGroup}:${label}`;
     const sec = document.createElement('section');
     sec.className = 'cat' + (collapsed.has(key) ? ' collapsed' : '');
@@ -85,12 +94,43 @@ function renderGrouped(root) {
       sec.classList.toggle('collapsed');
     };
     const ul = sec.querySelector('ul');
+    if (!rows.length) ul.innerHTML = '<li class="none">Buraya sürükle</li>';
     for (const { cat: c, task } of rows) {
       const parent = lvl(task) ? parentOf(c.tasks, c.tasks.indexOf(task)) : null;
-      ul.append(buildTaskRow(c, task, { drag: false, showCat: true, flat: true, crumb: parent ? textOf(parent.text) : '' }));
+      ul.append(buildTaskRow(c, task, { drag: board ? 'source' : false, showCat: true, flat: true, crumb: parent ? textOf(parent.text) : '' }));
+    }
+    // Panoda görevi başka sütuna sürüklemek onu o gruba taşır (gün / öncelik / tamamlanma değişir)
+    if (board) {
+      sec.addEventListener('dragover', e => { if (dragging?.type === 'task' && canDropInGroup(i)) { e.preventDefault(); sec.classList.add('drop'); } });
+      sec.addEventListener('dragleave', e => { if (!sec.contains(e.relatedTarget)) sec.classList.remove('drop'); });
+      sec.addEventListener('drop', e => {
+        if (dragging?.type !== 'task' || !canDropInGroup(i)) return;
+        e.preventDefault();
+        const d = dragging;
+        endDrag();
+        dropInGroup(d, i);
+      });
     }
     root.append(sec);
   });
   if (!items.length) root.insertAdjacentHTML('beforeend', '<p class="muted tv-empty">Görev yok.</p>');
   return items.filter(x => !x.task.done).length;
+}
+
+// Panoda sütuna bırakma: görevin ilgili alanını değiştirir
+const canDropInGroup = i => !(todoGroup === 'day' && i === 0);   // "Gecikenler"e bırakılamaz
+function dropInGroup({ cat, task }, i) {
+  const today = todayISO();
+  let wantDone = !!task.done;
+  if (todoGroup === 'day') {
+    if (i === 6) wantDone = true;
+    else {
+      wantDone = false;
+      if (i === 5) { delete task.due; delete task.time; delete task.remind; }
+      else task.due = addDays(today, [0, 0, 1, 7, 14][i]);
+    }
+  } else if (todoGroup === 'prio') {
+    task.priority = 3 - i || undefined;
+  } else wantDone = i !== 0;   // "Açık" ↔ tamamlanan gruplar
+  if (wantDone !== !!task.done) setDone(cat, task, wantDone); else saveTodos();
 }

@@ -15,7 +15,9 @@
 // · <!-- eklendi:… tamamlandı:… --> arka planda tutulan zaman bilgisidir; Markdown'da görünmez.
 // · Silme = pasif yapma. Satır kalır, sonuna <!-- silindi: … --> eklenir; bu işaret silinince geri gelir.
 //   Kategori silinirse başlığına eklenir: ## Eski kategori <!-- silindi: … -->
+//   Kategori simgesi başlıkta görünmeyen işarettir: ## İş <!-- simge:💼 -->
 const TASK_RE = /^\s*[-*+]\s+\[([ xX])\]\s+(.*)$/;
+const ICON_RE = /\s*<!--\s*simge:([^>]*?)\s*-->/u;
 const DEL_RE = /\s*<!--\s*silindi\b[^>]*-->\s*$/i;
 const DEL_AT_RE = /<!--\s*silindi:?\s*([^>]*?)\s*-->/i;
 const META_RE = /\s*<!--\s*((?:eklendi|tamamlandı):[^>]*?)\s*-->/u;
@@ -156,13 +158,16 @@ function parseTodos(text) {
     const t = line.match(TASK_RE);
     if (h1 && head === null && !cur && !loose.tasks.length && !loose.hidden.length) head = line;
     else if (h) {
-      const name = h[1].replace(DEL_RE, '').trim();
+      const raw = h[1].replace(DEL_RE, '').trim();
+      const icon = (raw.match(ICON_RE) || [])[1];
+      const name = raw.replace(ICON_RE, '').trim();
       if (DEL_RE.test(h[1])) {
         // Pasif kategori: olduğu gibi saklanır, gösterilmez
-        cur = { ...newCat(name), deleted: true, mark: h[1].match(DEL_RE)[0].trim() };
+        cur = { ...newCat(name), ...(icon ? { icon } : {}), deleted: true, mark: h[1].match(DEL_RE)[0].trim() };
         cats.push(cur);
       } else {
         cur = cats.find(c => !c.deleted && c.name === name) || (cats.push(newCat(name)), cats[cats.length - 1]);
+        if (icon && !cur.icon) cur.icon = icon;
       }
     } else if (t) {
       const target = cur || loose;
@@ -183,7 +188,7 @@ function serializeTodos() {
   const out = [todo.head, ''];
   for (const c of todo.cats) {
     if (c.shared) continue;   // ortak kategoriler buluttadır, todo.md'ye yazılmaz
-    out.push(c.deleted ? `## ${c.name} ${c.mark}` : `## ${c.name}`);
+    out.push(`## ${c.name}${c.icon ? ` <!-- simge:${c.icon} -->` : ''}${c.deleted ? ' ' + c.mark : ''}`);
     for (const t of c.tasks) out.push('  '.repeat(lvl(t)) + taskLine(t));
     out.push(...c.hidden, '');
   }
@@ -307,19 +312,19 @@ function dueButtonHtml(task) {
 
 // Tek görev satırı. Kategori kartında sürüklenebilir; liste/pano görünümlerinde (drag: false) yalnızca tıklama işlemleri vardır.
 //   showCat: satırda kategori etiketi · flat: alt görev girintisi/daraltma/ekleme yok (kategoriye göre gruplanmayan görünümler) · crumb: üst görevin adı
-function buildTaskRow(cat, task, { drag = true, showCat = false, flat = false, crumb = '' } = {}) {
+function buildTaskRow(cat, task, { drag = true, showCat = false, flat = false, crumb = '' } = {}) {   // drag: true = sürükle + sırala/bırak · 'source' = yalnızca sürüklenebilir
   const ti = cat.tasks.indexOf(task), subs = flat ? [] : cat.tasks.slice(ti + 1, blockEnd(cat.tasks, ti));
   const li = document.createElement('li');
   li.className = (task.done ? 'done' : '') + (lvl(task) && !flat ? ' sub' : '');
   li.style.setProperty('--lvl', flat ? 0 : lvl(task));
-  li.draggable = drag;
+  li.draggable = !!drag;
   if (task.priority) li.dataset.p = task.priority;
   li.innerHTML = (subs.length ? `<button class="fold" title="Alt görevleri göster/gizle">${folded.has(task) ? '▸' : '▾'}</button>` : '')
     + `<input type="checkbox" ${task.done ? 'checked' : ''}>`
     + `<span class="txt" title="${esc(taskTitle(task))}">${crumb ? `<span class="crumb" title="Üst görev">↳ ${esc(crumb)}</span> ` : ''}${renderInline(task.text)}</span>`
     + (subs.length ? `<span class="sub-cnt" title="Tamamlanan alt görev">${subs.filter(t => t.done).length}/${subs.length}</span>` : '')
     + (cat.shared ? assigneeButtonHtml(cat, task) : '')
-    + (showCat ? `<span class="cat-tag" style="--c:${catColor(cat)}"><span class="dot"></span>${esc(cat.name)}</span>` : '')
+    + (showCat ? `<span class="cat-tag" style="--c:${catColor(cat)}">${cat.icon ? `<span class="cat-ico">${cat.icon}</span>` : '<span class="dot"></span>'}${esc(cat.name)}</span>` : '')
     + dueButtonHtml(task)
     + '<button class="row-add prio" title="Öncelik">⚑</button>'
     + (cat.shared || flat ? '' : '<button class="row-add" title="Altına görev ekle">＋</button>')   // ortak kategoride sıra oluşturma tarihine göre; yalnızca alt görev eklenir
@@ -354,14 +359,14 @@ function buildTaskRow(cat, task, { drag = true, showCat = false, flat = false, c
     li.classList.add('dragging');
   });
   if (drag) li.addEventListener('dragend', endDrag);
-  if (drag) li.addEventListener('dragover', e => {
+  if (drag === true) li.addEventListener('dragover', e => {
     if (dragging?.type !== 'task') return;
     e.preventDefault();
     e.stopPropagation();
     clearDropMarks();
     if (dragging.task !== task) li.classList.add(upperHalf(e, li) ? 'drop-before' : 'drop-after');
   });
-  if (drag) li.addEventListener('drop', e => {
+  if (drag === true) li.addEventListener('drop', e => {
     if (dragging?.type !== 'task') return;
     e.preventDefault();
     e.stopPropagation();
@@ -417,10 +422,11 @@ function renderTodos() {
       <div class="cat-head" draggable="true" title="Sürükleyerek sırala">
         <span class="chev">▼</span>
         <span class="dot" title="${loadTitle(cat)}"></span>
-        <span class="name">${esc(cat.name)}</span>${cat.shared ? `<button class="shared-mark" title="${esc(sharedTitle(cat))}">👥 ${cat.uyeler.length}</button>` : ''}
+        ${cat.icon ? `<button class="cat-ico" title="Simgeyi değiştir">${cat.icon}</button>` : ''}<span class="name">${esc(cat.name)}</span>${cat.shared ? `<button class="shared-mark" title="${esc(sharedTitle(cat))}">👥 ${cat.uyeler.length}</button>` : ''}
         <span class="cnt" title="Yapılmamış / toplam">${openCount}${cat.tasks.length ? ' / ' + cat.tasks.length : ''}</span>
         <span class="tools">
           <button class="add" title="Bu kategoriye görev ekle">＋</button>
+          <button class="ico" title="Kategori simgesi">☺</button>
           ${cat.shared && !isOwner(cat) ? '' : '<button class="ren" title="Yeniden adlandır">✎</button>'}
           ${cat.shared && !isOwner(cat) ? '' : '<button class="del" title="Kategoriyi sil">🗑</button>'}
         </span>
@@ -434,6 +440,7 @@ function renderTodos() {
       sec.classList.toggle('collapsed');
     };
     head.querySelector('.add').onclick = () => startNewTask(cat);
+    head.querySelectorAll('.ico, .cat-ico').forEach(b => b.onclick = () => pickIcon(b, cat.icon, ic => setCatIcon(cat, ic)));
     const memBtn = head.querySelector('.shared-mark');
     if (memBtn) memBtn.onclick = () => openMembers(cat);
     const renBtn = head.querySelector('.ren'), delBtn = head.querySelector('.del');
@@ -530,6 +537,27 @@ Bu işlem geri alınamaz.`)) return;
   renderCalendar();
   renderStats();
 }
+
+// Kategori simgesi: ortak kategorilerde yalnızca bu cihazda saklanır (todo.md ortak kategoriyi tutmaz)
+function setCatIcon(cat, icon) {
+  if (cat.shared) { const m = store.get('catIcons', {}); if (icon) m[sharedKey(cat)] = icon; else delete m[sharedKey(cat)]; store.set('catIcons', m); }
+  cat.icon = icon || undefined;
+  saveTodos();
+}
+const CAT_ICONS = ['💼', '🏠', '🛒', '📚', '💡', '🎯', '✈️', '💰', '🧾', '📞', '✉️', '🔧', '🧹', '🍽️', '💪', '🧘', '🎮', '🎵', '🎬', '📷', '🚗', '🐶', '🌱', '❤️', '🎓', '🧑‍💻', '📅', '⭐', '🔥', '📦', '🏥', '🎁', '🧠', '✏️', '📝', '🗂️', '🏦', '🛠️', '🧳', '🏃'];
+const iconPop = $('#iconPop');
+function closeIconPop() { iconPop.hidden = true; }
+function pickIcon(anchor, current, onPick) {
+  iconPop.innerHTML = `<div class="ip-grid">${CAT_ICONS.map(i => `<button type="button" data-i="${i}" class="${i === current ? 'on' : ''}">${i}</button>`).join('')}</div>${current ? '<button type="button" class="ip-clear">Simgeyi kaldır</button>' : ''}`;
+  iconPop.querySelectorAll('[data-i]').forEach(b => b.onclick = () => { closeIconPop(); onPick(b.dataset.i); });
+  iconPop.querySelector('.ip-clear')?.addEventListener('click', () => { closeIconPop(); onPick(null); });
+  iconPop.hidden = false;
+  const r = anchor.getBoundingClientRect(), w = iconPop.offsetWidth, h = iconPop.offsetHeight;
+  iconPop.style.left = `${Math.min(Math.max(8, r.left), innerWidth - w - 8)}px`;
+  iconPop.style.top = `${Math.max(8, r.bottom + 6 + h > innerHeight - 8 ? r.top - h - 6 : r.bottom + 6)}px`;
+}
+document.addEventListener('mousedown', e => { if (!iconPop.hidden && !e.target.closest('#iconPop, .ico, .cat-ico')) closeIconPop(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeIconPop(); });
 
 // Öncelik seçici: küçük açılır menü
 const prioPop = $('#prioPop');

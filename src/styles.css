@@ -941,18 +941,39 @@ body.solo .stats .st-side .st-kv:nth-child(2) { display: none; }   /* açık/gec
 .settings .adm-name { flex: 1; min-width: 0; }
 .adm-use { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; font-size: var(--fs-sub); }
 
-/* Saat ve hatırlatıcı (tarih penceresi) */
-.dp-time, .dp-remind { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border-top: 1px solid var(--line); padding-top: 8px; }
-.dp-time .muted, .dp-remind .muted { font-size: var(--fs-meta); margin-right: 2px; }
-.dp-time input[type="time"], .dp-remind-add input {
-  background: var(--card-2); color: var(--text); border: 1px solid var(--line); border-radius: 9px; outline: none;
+/* Tarih penceresi: açılır bölümler (Saat / Hatırlatıcı / Tekrar) ve saat seçici */
+.dp-sec { border-top: 1px solid var(--line); }
+.dp-sec-h { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; padding: 8px 2px; font-size: var(--fs-sub); color: var(--text); text-align: left; }
+.dp-sec-h:hover { color: var(--accent); }
+.dp-sec-h > span:first-child { flex: none; }
+.dp-sec-h .dp-val { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-meta); color: var(--muted); }
+.dp-sec-h .dp-val.set { color: var(--accent); font-weight: 650; }
+.dp-sec-h i { font-style: normal; color: var(--muted); font-size: 10px; }
+.dp-sec-b { padding: 0 0 8px; }
+.dp-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.dp-chips button, .tg-foot button, .dp-radd { border: 1px solid var(--line); background: var(--card-2); border-radius: 99px; padding: 2px 9px; font-size: var(--fs-meta); font-weight: 500; }
+.dp-chips button:hover:not(:disabled), .tg-foot button:hover, .dp-radd:hover { border-color: var(--accent); }
+.dp-chips button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.dp-chips button:disabled { opacity: .4; cursor: default; }
+.dp-remind-add { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 8px; }
+.dp-remind-add .muted { font-size: var(--fs-meta); width: 100%; }
+.dp-remind-add input, .dp-remind-add select {
+  background: var(--card-2); color: var(--text); border: 1px solid var(--line); border-radius: 8px; outline: none;
   padding: 2px 6px; font-size: var(--fs-meta); color-scheme: dark;
 }
-[data-theme="light"] .dp-time input, [data-theme="light"] .dp-remind-add input, [data-theme="cream"] .dp-time input, [data-theme="cream"] .dp-remind-add input { color-scheme: light; }
-.dp-time input[type="time"]:focus, .dp-remind-add input:focus { border-color: var(--accent); }
-.dp-time input:disabled { opacity: .45; }
-.dp-remind button:disabled { opacity: .4; cursor: default; }
-.dp-remind-add { display: flex; gap: 4px; align-items: center; width: 100%; }
+[data-theme="light"] .dp-remind-add input, [data-theme="light"] .dp-remind-add select, [data-theme="cream"] .dp-remind-add input, [data-theme="cream"] .dp-remind-add select { color-scheme: light; }
+.dp-foot { display: flex; justify-content: flex-end; padding-top: 6px; border-top: 1px solid var(--line); }
+.dp-done { border: 0; background: var(--accent); color: #fff; border-radius: 99px; padding: 4px 16px; font-size: var(--fs-sub); font-weight: 600; }
+/* Saat seçici: 24 saat düğmesi (6×4) + 4 dakika düğmesi */
+.tg { display: flex; flex-direction: column; gap: 6px; }
+.tg-h { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; }
+.tg-m { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; padding-top: 6px; border-top: 1px dashed var(--line); }
+.tg button { border: 1px solid var(--line); background: var(--card-2); border-radius: 8px; padding: 4px 0; font-size: var(--fs-sub); font-variant-numeric: tabular-nums; }
+.tg button:hover { border-color: var(--accent); }
+.tg button.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 650; }
+.tg-foot { display: flex; justify-content: flex-end; gap: 6px; margin-top: 6px; }
+.time-pop { position: fixed; z-index: 45; width: 252px; padding: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 18px 44px rgba(0,0,0,.42); }
+.time-pop[hidden] { display: none; }
 .due .bell, .due-btn .bell { margin-left: 4px; font-size: .9em; }
 
 /* Takvim: Ay / Hafta / Gün seçici (yalnızca tam ekranda) ve saat çizelgesi */
@@ -1008,10 +1029,12 @@ body.solo .todo-views { display: inline-flex; }
 #todoList[data-mode="list"] { display: block; max-width: 880px; margin-left: auto; margin-right: auto; width: 100%; }
 #todoList[data-mode="list"] .cat { background: none; border: 0; padding: 0; margin-bottom: 14px; }
 #todoList[data-mode="list"] .tv-add { margin-bottom: 14px; }
-#todoList[data-mode="board"] { display: flex; align-items: flex-start; gap: 12px; overflow: auto; }
-#todoList[data-mode="board"] .cat { flex: 0 0 300px; max-height: 100%; overflow-y: auto; margin: 0; }
-#todoList[data-mode="board"] .tv-add { flex: 0 0 260px; }
-#todoList[data-mode="board"] .cat li { background: var(--card); border: 1px solid var(--line); margin-bottom: 4px; }
+#todoList[data-mode="board"] { display: grid; grid-template-columns: repeat(var(--tv-cols, 3), minmax(0, 1fr)); gap: 12px; align-items: stretch; align-content: start; }
+#todoList[data-mode="board"] .cat { display: flex; flex-direction: column; margin: 0; background: var(--card-2); border: 1px solid var(--line); border-top: 3px solid var(--accent); border-radius: 14px; padding: 4px 8px 8px; min-height: 160px; }
+#todoList[data-mode="board"] .cat.drop { outline: 2px dashed var(--accent); background: var(--accent-soft); }
+#todoList[data-mode="board"] .cat ul { flex: 1; }
+#todoList[data-mode="board"] .tv-add { grid-column: 1 / -1; }
+#todoList[data-mode="board"] .cat li { background: var(--card); border: 1px solid var(--line); margin-bottom: 5px; }
 #todoList[data-mode="board"] .cat li:hover { background: var(--card-3); }
 .cat li .crumb { font-size: var(--fs-meta); color: var(--muted); margin-right: 4px; }
 .cat li .cat-tag { display: inline-flex; align-items: center; gap: 4px; flex: none; font-size: var(--fs-meta); color: var(--muted); margin-top: 1px; }
@@ -1032,3 +1055,56 @@ body.solo .todo-views { display: inline-flex; }
 .assign-pop button { display: flex; align-items: center; gap: 8px; width: 100%; }
 .assign-pop .chk { width: 14px; flex: none; color: var(--accent); font-weight: 700; }
 .assign-pop .clear { color: var(--muted); border-top: 1px solid var(--line); border-radius: 0 0 8px 8px; margin-top: 4px; }
+
+/* Gün penceresi (takvim): üstte gün gezgini, ortada görevler, altta ekleme formu */
+.cal-day { padding: 0; overflow: hidden; display: flex; flex-direction: column; max-height: min(560px, calc(100vh - 24px)); }
+.cd-head { display: flex; align-items: center; gap: 6px; padding: 10px 10px 8px 12px; border-bottom: 1px solid var(--line); }
+.cd-title { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.cd-title b { font-weight: 650; font-size: var(--fs-text); }
+.cd-title .muted { font-size: var(--fs-meta); }
+.cd-nav { border: 0; background: var(--card-2); border-radius: 8px; width: 26px; height: 26px; color: var(--text); font-size: 15px; flex: none; }
+.cd-nav:hover { background: var(--accent-soft); color: var(--accent); }
+.cd-body { flex: 1; min-height: 60px; overflow-y: auto; padding: 4px 8px; }
+.cd-sec { font-size: var(--fs-meta); font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; padding: 8px 4px 2px; }
+.cd-sec.late { color: var(--load-3); }
+.cd-empty { text-align: center; padding: 22px 8px; font-size: var(--fs-sub); }
+.cd-body .cal-tasks { max-height: none; overflow: visible; }
+.cd-t { flex: none; min-width: 44px; border: 0; background: var(--card-2); color: var(--accent); border-radius: 99px; padding: 1px 7px; font-size: var(--fs-meta); font-weight: 650; font-variant-numeric: tabular-nums; }
+.cd-t.none { color: var(--muted); font-weight: 500; opacity: 0; }
+.cal-tasks li:hover .cd-t.none { opacity: 1; }
+.cd-t:hover { background: var(--accent-soft); }
+.cd-del { border: 0; background: none; color: var(--muted); opacity: 0; padding: 0 4px; }
+.cal-tasks li:hover .cd-del { opacity: 1; }
+.cd-del:hover { color: var(--danger); }
+.cal-tasks li[data-p="3"] input[type="checkbox"]:not(:checked) { border-color: var(--load-3); }
+.cal-tasks li[data-p="2"] input[type="checkbox"]:not(:checked) { border-color: var(--load-2); }
+.cal-tasks li[data-p="1"] input[type="checkbox"]:not(:checked) { border-color: var(--accent); }
+.cd-add { padding: 8px 10px 10px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; background: var(--card-2); }
+.cd-add input { width: 100%; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; outline: none; }
+.cd-add input:focus { border-color: var(--accent); }
+.cd-opts { display: flex; align-items: center; gap: 6px; }
+.cd-timebtn { border: 1px solid var(--line); background: var(--card); border-radius: 99px; padding: 3px 12px; font-size: var(--fs-sub); font-variant-numeric: tabular-nums; }
+.cd-timebtn.on { border-color: var(--accent); color: var(--accent); font-weight: 650; }
+.cd-cat { flex: 1; min-width: 0; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 99px; padding: 3px 10px; font-size: var(--fs-sub); outline: none; }
+.cd-submit { border: 0; background: var(--accent); color: #fff; border-radius: 99px; padding: 4px 16px; font-size: var(--fs-sub); font-weight: 600; }
+.cal-pick { position: absolute; left: 2px; right: 2px; z-index: 1; pointer-events: none; border: 2px dashed var(--accent); border-radius: 6px; background: var(--accent-soft); color: var(--accent); font-size: var(--fs-meta); font-weight: 650; padding: 0 6px; }
+.cal-col { cursor: cell; }
+
+/* Kategori simgesi */
+.cat-ico { font-size: 1.05em; line-height: 1; }
+button.cat-ico { border: 0; background: none; padding: 0 2px; cursor: pointer; }
+.cat-tag .cat-ico { font-size: 1em; }
+.icon-pop { position: fixed; z-index: 45; width: 268px; padding: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 18px 44px rgba(0,0,0,.42); }
+.icon-pop[hidden] { display: none; }
+.ip-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
+.ip-grid button { border: 0; background: none; border-radius: 8px; font-size: 18px; padding: 4px 0; }
+.ip-grid button:hover, .ip-grid button.on { background: var(--accent-soft); }
+.ip-clear { width: 100%; margin-top: 6px; border: 0; background: none; color: var(--muted); font-size: var(--fs-meta); padding: 4px; border-radius: 8px; }
+.ip-clear:hover { background: var(--card-2); }
+
+/* Liste düzeni: kategoriler belirgin başlıklarla ayrılır (ana sayfadaki küçük kart ve tam ekran listede) */
+.todo-list .cat { margin-bottom: 14px; }
+.todo-list .cat-head { border-bottom: 1px solid var(--line); border-radius: 0; padding: 8px 4px 6px; margin-bottom: 2px; }
+.todo-list .cat-head .name { font-size: var(--fs-title); }
+
+@container (min-width: 720px) { .todo-list .cat { margin: 0; } }

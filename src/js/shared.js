@@ -114,7 +114,7 @@ function applyCategories(docs) {
       cat = { name: d.ad, tasks: [], hidden: [], shared: true, cid: d.id, base: new Map() };
       fresh.push(cat);
     }
-    Object.assign(cat, { name: d.ad, sahip: d.sahip, uyeler: d.uyeler, uyeAdlari: d.uyeAdlari || {} });
+    Object.assign(cat, { name: d.ad, sahip: d.sahip, uyeler: d.uyeler, uyeAdlari: d.uyeAdlari || {}, icon: store.get('catIcons', {})[`c:${d.id}`] });
     if (membersCid === d.id) renderMembers(membersMsg);
     if (!sync.taskUnsubs.has(d.id)) {
       sync.taskUnsubs.set(d.id, watchCatTasks(d.id));
