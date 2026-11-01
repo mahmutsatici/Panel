@@ -1,0 +1,18 @@
+Panel 2.1.0 — Yapılacaklar geliştirmeleri
+=========================================
+
+ÖNEMLİ (ortak kategori kullananlar): Firebase konsolunda Firestore → Rules sayfasına firebase/firestore.rules dosyasının güncel halini yapıştırıp
+Publish et. Bu sürümün buluta yazdığı yeni alanlar eski kurallarla reddedilir. Ortak kategorileri kullanan herkesin uygulamayı da güncellemesi gerekir.
+
+• Alt görevler: bir görevin altına en fazla 3 seviye alt görev eklenir. Satırdaki ⤷ düğmesi alt görev ekler; yazarken Tab girintiler, Shift+Tab bir seviye çıkarır.
+  Üst görevi tamamlamak alt görevlerini de tamamlar (Todoist gibi); alt görev sayısı satırda 2/3 diye görünür, ▾ ile daraltılır.
+  todo.md'de alt görev 2 boşluk girintili maddedir; eski sürümler bu dosyayı yine okur.
+• Saat ve hatırlatıcı: tarih penceresinde ⏰ saat seçilir; 🔔 Hatırlat ile görev saatinden önce (saatinde / 15 dk / 1 saat / 1 gün) ya da belirli bir gün ve saatte hatırlatılır.
+  Hatırlatıcılar sistem bildirimi olarak gelir (Panel tepside çalışırken de). "yarın 15:30 toplantı", "saat 9 arama" gibi yazılanlardan saat algılanır.
+• Öncelik: satırdaki ⚑ düğmesiyle Yüksek / Orta / Düşük; onay halkasının rengi önceliği gösterir (todo.md'de ⏫ 🔼 🔽).
+• Yuvarlak onay kutusu (Todoist tarzı).
+• Takvim: tam ekranda Ay / Hafta / Gün görünümü. Saatli görevler saat çizelgesinde, saatsizler "Gün boyu" şeridinde; görevi başka güne ya da saate sürükleyerek taşırsın.
+• Yapılacaklar tam ekran: görünüm biçimi Kart / Liste / Pano ve gruplama (Kategori / Gün / Öncelik / Tamamlanma).
+• Ortak kategoriler: bir göreve birden fazla kişi atanabilir (tıklayınca işaret kutulu liste açılır). Alt görev, saat, hatırlatıcı ve öncelik ortak görevlerde de çalışır;
+  hatırlatıcı tüm üyelerde çalar.
+• Küçük: Ayarlar → Sistem'de "Uygulamadan çık"; takvimde seçili gün işareti pencere kapanınca kalkar.
