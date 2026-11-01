@@ -10,7 +10,8 @@
 // · Alt görev = 2 boşluk girintili madde (en fazla 3 seviye):
 //   - [ ] analiz yapılacak
 //     - [ ] masraf analizi
-// · "📅 YYYY-AA-GG" son tarihtir (Obsidian Tasks ile aynı biçim); "⏰ SS:DD" görevin saati; "🔔 0dk,15dk,2026-11-05T09:00" hatırlatıcılar.
+// · "📅 YYYY-AA-GG" son tarihtir (Obsidian Tasks ile aynı biçim); "⏰ SS:DD" görevin saati; "🔔 0dk,15dk,2026-11-05T09:00" hatırlatıcılar;
+//   "⏫ 🔼 🔽" öncelik (yüksek / orta / düşük).
 // · <!-- eklendi:… tamamlandı:… --> arka planda tutulan zaman bilgisidir; Markdown'da görünmez.
 // · Silme = pasif yapma. Satır kalır, sonuna <!-- silindi: … --> eklenir; bu işaret silinince geri gelir.
 //   Kategori silinirse başlığına eklenir: ## Eski kategori <!-- silindi: … -->
@@ -21,9 +22,13 @@ const META_RE = /\s*<!--\s*((?:eklendi|tamamlandı):[^>]*?)\s*-->/u;
 const DUE_RE = /\s*📅\s*(\d{4}-\d{2}-\d{2})/u;
 const TIME_RE = /\s*⏰\s*(\d{1,2}:\d{2})/u;
 const REMIND_LINE_RE = /\s*🔔\s*([^⏰📅🔁<]*?)\s*(?=⏰|📅|🔁|<!--|$)/u;
+const PRIO_RE = /\s*([⏫🔼🔽])/u;
 const REC_RE = /\s*🔁\s*([^📅<]*?)\s*(?=📅|<!--|$)/u;
 const deletedMark = () => `<!-- silindi: ${new Date().toLocaleString('sv-SE').slice(0, 16)} -->`;
 const GENERAL = 'Genel';
+// Öncelik: 1 düşük · 2 orta · 3 yüksek (Obsidian Tasks ile aynı işaretler)
+const PRIO_MARKS = ['', '🔽', '🔼', '⏫'];
+const PRIO_NAMES = ['Öncelik yok', 'Düşük', 'Orta', 'Yüksek'];
 const newCat = name => ({ name, tasks: [], hidden: [] });
 const activeCats = () => todo.cats.filter(c => !c.deleted);
 let todo = { head: '# Yapılacaklar', cats: [] };
@@ -106,6 +111,8 @@ function parseTaskBody(body) {
   }
   const due = body.match(DUE_RE);
   if (due) { task.due = due[1]; body = body.replace(DUE_RE, ''); }
+  const prio = body.match(PRIO_RE);
+  if (prio) { task.priority = PRIO_MARKS.indexOf(prio[1]); body = body.replace(PRIO_RE, ''); }
   const time = body.match(TIME_RE);
   if (time) { task.time = time[1].padStart(5, '0'); body = body.replace(TIME_RE, ''); }
   const remind = body.match(REMIND_LINE_RE);
@@ -130,6 +137,7 @@ function taskLine(t) {
   if (t.rec) s += ` 🔁 ${t.rec}`;
   if (t.due) s += ` 📅 ${t.due}`;
   if (t.time) s += ` ⏰ ${t.time}`;
+  if (t.priority) s += ` ${PRIO_MARKS[t.priority]}`;
   if (t.remind?.length) s += ` 🔔 ${t.remind.join(',')}`;
   const meta = [];
   if (t.created) meta.push(`eklendi:${t.created}`);
@@ -206,8 +214,9 @@ function takeBlock(d, dest) {
   return d.cat.tasks.splice(i, blockEnd(d.cat.tasks, i) - i);
 }
 
-function addTask(cat, text, due, rec, time) {
-  insertTask(cat, { done: false, text, due: due || undefined, rec: rec || undefined, ...(time && due && !cat.shared ? { time } : {}), created: stampNow() });
+function addTask(cat, text, due, rec, time, extra = {}) {
+  const more = cat.shared ? {} : { ...(extra.priority ? { priority: extra.priority } : {}), ...(extra.remind?.length ? { remind: extra.remind } : {}) };
+  insertTask(cat, { done: false, text, due: due || undefined, rec: rec || undefined, ...(time && due && !cat.shared ? { time } : {}), ...more, created: stampNow() });
   collapsed.delete(cat.name);
   return saveTodos();
 }
@@ -227,7 +236,7 @@ function setDone(cat, task, done) {
   if (done && task.rec) {
     const copy = block.map(t => ({ done: false, text: t.text, ...(t.level ? { level: t.level } : {}), created: now }));
     const rel = (task.remind || []).filter(isRelRemind);   // sabit tarihli hatırlatıcılar tekrara geçmez
-    Object.assign(copy[0], { rec: task.rec, due: nextRecDate(task.rec, task.due), ...(task.time ? { time: task.time } : {}), ...(rel.length ? { remind: rel } : {}) });
+    Object.assign(copy[0], { rec: task.rec, due: nextRecDate(task.rec, task.due), ...(task.time ? { time: task.time } : {}), ...(task.priority ? { priority: task.priority } : {}), ...(rel.length ? { remind: rel } : {}) });
     delete task.rec;
     reinsert(cat, copy, parent);
   }
@@ -295,6 +304,83 @@ function dueButtonHtml(task) {
   return `<button class="due ${d.cls}" title="${d.title}${timeTip}${recTip}\n(değiştirmek için tıkla)">${rec}${d.label}${task.time ? ' ' + task.time : ''}${bell}</button>`;
 }
 
+// Tek görev satırı. Kategori kartında sürüklenebilir; liste/pano görünümlerinde (drag: false) yalnızca tıklama işlemleri vardır.
+//   showCat: satırda kategori etiketi · flat: alt görev girintisi/daraltma/ekleme yok (kategoriye göre gruplanmayan görünümler) · crumb: üst görevin adı
+function buildTaskRow(cat, task, { drag = true, showCat = false, flat = false, crumb = '' } = {}) {
+  const ti = cat.tasks.indexOf(task), subs = flat ? [] : cat.tasks.slice(ti + 1, blockEnd(cat.tasks, ti));
+  const li = document.createElement('li');
+  li.className = (task.done ? 'done' : '') + (lvl(task) && !flat ? ' sub' : '');
+  li.style.setProperty('--lvl', flat ? 0 : lvl(task));
+  li.draggable = drag;
+  if (task.priority) li.dataset.p = task.priority;
+  li.innerHTML = (subs.length ? `<button class="fold" title="Alt görevleri göster/gizle">${folded.has(task) ? '▸' : '▾'}</button>` : '')
+    + `<input type="checkbox" ${task.done ? 'checked' : ''}>`
+    + `<span class="txt" title="${esc(taskTitle(task))}">${crumb ? `<span class="crumb" title="Üst görev">↳ ${esc(crumb)}</span> ` : ''}${renderInline(task.text)}</span>`
+    + (subs.length ? `<span class="sub-cnt" title="Tamamlanan alt görev">${subs.filter(t => t.done).length}/${subs.length}</span>` : '')
+    + (cat.shared ? assigneeButtonHtml(cat, task) : '')
+    + (showCat ? `<span class="cat-tag" style="--c:${catColor(cat)}"><span class="dot"></span>${esc(cat.name)}</span>` : '')
+    + dueButtonHtml(task)
+    + (cat.shared ? '' : '<button class="row-add prio" title="Öncelik">⚑</button>')
+    + (cat.shared || flat ? '' : '<button class="row-add" title="Altına görev ekle">＋</button>')
+    + (cat.shared || flat || lvl(task) >= MAX_LEVEL ? '' : '<button class="row-add sub-add" title="Alt görev ekle">⤷</button>')
+    + '<button class="del" title="Sil">✕</button>';
+  const fold = li.querySelector('.fold');
+  if (fold) fold.onclick = () => { folded.has(task) ? folded.delete(task) : folded.add(task); renderTodos(); };
+  li.querySelector('input').onchange = e => setDone(cat, task, e.target.checked);
+  const asg = li.querySelector('.asg');
+  if (asg) asg.onclick = e => pickAssignee(e.currentTarget, cat, task);
+  const prioBtn = li.querySelector('.prio');
+  if (prioBtn) prioBtn.onclick = () => pickPriority(prioBtn, task.priority || 0, n => { task.priority = n || undefined; saveTodos(); });
+  const rowAdd = li.querySelector('.row-add:not(.sub-add):not(.prio)'), subAdd = li.querySelector('.sub-add');
+  if (rowAdd) rowAdd.onclick = () => startNewTask(cat, task, lvl(task));
+  if (subAdd) subAdd.onclick = () => { folded.delete(task); startNewTask(cat, task, lvl(task) + 1); };
+  li.querySelector('.del').onclick = () => {
+    if (subs.length && !confirm(`Bu görevle birlikte ${subs.length} alt görev de silinsin mi?
+
+(Silinenler penceresinden geri getirebilirsin.)`)) return;
+    deleteTask(cat, task);
+    saveTodos();
+  };
+  li.querySelector('.due').onclick = e => pickDate(e.currentTarget, { due: task.due, rec: task.rec, time: task.time, remind: task.remind, allowTime: !cat.shared }, v => setDueRec(task, v));
+  // Metne tıklayınca düzenleme modu (metindeki bağlantıya tıklamak bağlantıyı açar)
+  li.querySelector('.txt').onclick = e => { if (!e.target.closest('a')) editTask(li, task, cat); };
+
+  // --- Görev sürükleme: aynı kategoride sırala ya da başka kategoriye taşı ---
+  if (drag) li.addEventListener('dragstart', e => {
+    e.stopPropagation();
+    dragging = { type: 'task', cat, task };
+    e.dataTransfer.effectAllowed = 'move';
+    li.classList.add('dragging');
+  });
+  if (drag) li.addEventListener('dragend', endDrag);
+  if (drag) li.addEventListener('dragover', e => {
+    if (dragging?.type !== 'task') return;
+    e.preventDefault();
+    e.stopPropagation();
+    clearDropMarks();
+    if (dragging.task !== task) li.classList.add(upperHalf(e, li) ? 'drop-before' : 'drop-after');
+  });
+  if (drag) li.addEventListener('drop', e => {
+    if (dragging?.type !== 'task') return;
+    e.preventDefault();
+    e.stopPropagation();
+    const d = dragging;
+    if (d.task === task) return endDrag();
+    if (d.cat === cat && cat.shared) return endDrag();   // ortak kategoride sıra oluşturma tarihine göre
+    if (d.cat === cat && blockOf(cat, d.task).includes(task)) return endDrag();   // görev kendi alt görevinin yanına bırakılamaz
+    const before = upperHalf(e, li);
+    const block = takeBlock(d, cat);
+    setBlockLevel(block, lvl(task));   // hedef görevle aynı seviyeye (kardeş) gelir
+    const ti = cat.tasks.indexOf(task);
+    cat.tasks.splice(before ? ti : blockEnd(cat.tasks, ti), 0, ...block);
+    // Yapılmış/yapılmamış ayrımı her zaman korunur
+    cat.tasks = sortTree(cat.tasks);
+    endDrag();
+    saveTodos();
+  });
+  return li;
+}
+
 const folded = new WeakSet();   // alt görevleri gizlenmiş görevler (yalnızca bu oturumda)
 // Çizilecek görevler: tamamlananlar gizliyse açık alt görevi olan yapılmış görev yine görünür; daraltılmış görevin alt görevleri gizlenir
 function visibleTasks(cat) {
@@ -311,10 +397,12 @@ function visibleTasks(cat) {
 
 function renderTodos() {
   const root = $('#todoList');
+  syncTodoToolbar();
   root.innerHTML = '';
   let open = 0;
 
-  for (const cat of activeCats()) {
+  if (!categoryCards()) open = renderGrouped(root);
+  else for (const cat of activeCats()) {
     // "Bana atananlar" süzgeci: yalnızca bana atanmış görevi olan ortak kategoriler
     if (mineOnly && !cat.tasks.some(t => isMine(t) && (showDone || !t.done))) continue;
     const openCount = openCountOf(cat);
@@ -412,73 +500,7 @@ Bu işlem geri alınamaz.`)) return;
     // Görevdeki "+" / alt görev "+" ile açılan satır, eklenecek konumdan önceki son görünür görevin altında durur
     const newAnchor = newHere && pendingNew.after ? tasks.filter(t => cat.tasks.indexOf(t) < newTaskIndex(pendingNew)).pop() : null;
     for (const task of tasks) {
-      const ti = cat.tasks.indexOf(task), subs = cat.tasks.slice(ti + 1, blockEnd(cat.tasks, ti));
-      const li = document.createElement('li');
-      li.className = (task.done ? 'done' : '') + (lvl(task) ? ' sub' : '');
-      li.style.setProperty('--lvl', lvl(task));
-      li.draggable = true;
-      li.innerHTML = (subs.length ? `<button class="fold" title="Alt görevleri göster/gizle">${folded.has(task) ? '▸' : '▾'}</button>` : '')
-        + `<input type="checkbox" ${task.done ? 'checked' : ''}>`
-        + `<span class="txt" title="${esc(taskTitle(task))}">${renderInline(task.text)}</span>`
-        + (subs.length ? `<span class="sub-cnt" title="Tamamlanan alt görev">${subs.filter(t => t.done).length}/${subs.length}</span>` : '')
-        + (cat.shared ? assigneeButtonHtml(cat, task) : '')
-        + dueButtonHtml(task)
-        + (cat.shared ? '' : '<button class="row-add" title="Altına görev ekle">＋</button>')
-        + (cat.shared || lvl(task) >= MAX_LEVEL ? '' : '<button class="row-add sub-add" title="Alt görev ekle">⤷</button>')
-        + '<button class="del" title="Sil">✕</button>';
-      const fold = li.querySelector('.fold');
-      if (fold) fold.onclick = () => { folded.has(task) ? folded.delete(task) : folded.add(task); renderTodos(); };
-      li.querySelector('input').onchange = e => setDone(cat, task, e.target.checked);
-      const asg = li.querySelector('.asg');
-      if (asg) asg.onclick = e => pickAssignee(e.currentTarget, cat, task);
-      const rowAdd = li.querySelector('.row-add:not(.sub-add)'), subAdd = li.querySelector('.sub-add');
-      if (rowAdd) rowAdd.onclick = () => startNewTask(cat, task, lvl(task));
-      if (subAdd) subAdd.onclick = () => { folded.delete(task); startNewTask(cat, task, lvl(task) + 1); };
-      li.querySelector('.del').onclick = () => {
-        if (subs.length && !confirm(`Bu görevle birlikte ${subs.length} alt görev de silinsin mi?
-
-(Silinenler penceresinden geri getirebilirsin.)`)) return;
-        deleteTask(cat, task);
-        saveTodos();
-      };
-      li.querySelector('.due').onclick = e => pickDate(e.currentTarget, { due: task.due, rec: task.rec, time: task.time, remind: task.remind, allowTime: !cat.shared }, v => setDueRec(task, v));
-      // Metne tıklayınca düzenleme modu (metindeki bağlantıya tıklamak bağlantıyı açar)
-      li.querySelector('.txt').onclick = e => { if (!e.target.closest('a')) editTask(li, task, cat); };
-
-      // --- Görev sürükleme: aynı kategoride sırala ya da başka kategoriye taşı ---
-      li.addEventListener('dragstart', e => {
-        e.stopPropagation();
-        dragging = { type: 'task', cat, task };
-        e.dataTransfer.effectAllowed = 'move';
-        li.classList.add('dragging');
-      });
-      li.addEventListener('dragend', endDrag);
-      li.addEventListener('dragover', e => {
-        if (dragging?.type !== 'task') return;
-        e.preventDefault();
-        e.stopPropagation();
-        clearDropMarks();
-        if (dragging.task !== task) li.classList.add(upperHalf(e, li) ? 'drop-before' : 'drop-after');
-      });
-      li.addEventListener('drop', e => {
-        if (dragging?.type !== 'task') return;
-        e.preventDefault();
-        e.stopPropagation();
-        const d = dragging;
-        if (d.task === task) return endDrag();
-        if (d.cat === cat && cat.shared) return endDrag();   // ortak kategoride sıra oluşturma tarihine göre
-        if (d.cat === cat && blockOf(cat, d.task).includes(task)) return endDrag();   // görev kendi alt görevinin yanına bırakılamaz
-        const before = upperHalf(e, li);
-        const block = takeBlock(d, cat);
-        setBlockLevel(block, lvl(task));   // hedef görevle aynı seviyeye (kardeş) gelir
-        const ti = cat.tasks.indexOf(task);
-        cat.tasks.splice(before ? ti : blockEnd(cat.tasks, ti), 0, ...block);
-        // Yapılmış/yapılmamış ayrımı her zaman korunur
-        cat.tasks = sortTree(cat.tasks);
-        endDrag();
-        saveTodos();
-      });
-      ul.append(li);
+      ul.append(buildTaskRow(cat, task));
       if (newAnchor === task) ul.append(buildNewTaskRow());
     }
     if (!tasks.length && !(newHere && !pendingNew.after)) {
@@ -507,6 +529,20 @@ Bu işlem geri alınamaz.`)) return;
   renderCalendar();
   renderStats();
 }
+
+// Öncelik seçici: küçük açılır menü
+const prioPop = $('#prioPop');
+function closePrioPop() { prioPop.hidden = true; }
+function pickPriority(anchor, current, onPick) {
+  prioPop.innerHTML = [3, 2, 1, 0].map(n => `<button type="button" data-p="${n}" class="${n === current ? 'on' : ''}"><span class="pdot" data-p="${n}"></span>${PRIO_NAMES[n]}</button>`).join('');
+  prioPop.querySelectorAll('button').forEach(b => b.onclick = () => { closePrioPop(); onPick(+b.dataset.p); });
+  prioPop.hidden = false;
+  const r = anchor.getBoundingClientRect(), w = prioPop.offsetWidth, h = prioPop.offsetHeight;
+  prioPop.style.left = `${Math.min(Math.max(8, r.left), innerWidth - w - 8)}px`;
+  prioPop.style.top = `${Math.max(8, r.bottom + 6 + h > innerHeight - 8 ? r.top - h - 6 : r.bottom + 6)}px`;
+}
+document.addEventListener('mousedown', e => { if (!prioPop.hidden && !e.target.closest('#prioPop, .prio')) closePrioPop(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePrioPop(); });
 
 // Bloğu bir seviye girintile (önceki kardeşin son alt görevi olur) ya da bir seviye çıkar (üstünün hemen altına geçer). Değişirse true.
 function indentTask(cat, task, delta) {
@@ -557,6 +593,7 @@ function editTask(li, task, cat) {
       if (rec) task.rec = rec;
       if (time && !cat.shared) { task.time = time; if (!task.due) task.due = todayISO(); }
       if (parsed.remind && !cat.shared) task.remind = [...new Set([...(task.remind || []), ...parsed.remind])];
+      if (parsed.priority && !cat.shared) task.priority = parsed.priority;
     }
     // Tab / Shift+Tab: görevi bir önceki görevin alt görevi yap / bir seviye çıkar
     const moved = ok && indent && !cat.shared && indentTask(cat, task, indent);
@@ -635,7 +672,7 @@ function buildNewTaskRow() {
     const due = parsed.due || nl.due || p.due, rec = parsed.rec || nl.rec || p.rec;
     const time = !p.cat.shared && due ? (parsed.time || nl.time || p.time) : null;
     const remind = !p.cat.shared ? [...new Set([...(parsed.remind || []), ...p.remind])] : [];
-    const task = { done: false, text, due: due || undefined, rec: rec || undefined, ...(time ? { time } : {}), ...(remind.length ? { remind } : {}), created: stampNow() };
+    const task = { done: false, text, due: due || undefined, rec: rec || undefined, ...(time ? { time } : {}), ...(remind.length ? { remind } : {}), ...(parsed.priority && !p.cat.shared ? { priority: parsed.priority } : {}), created: stampNow() };
     if (p.level) task.level = p.level;
     if (!p.after || p.cat.tasks.indexOf(p.after) === -1) insertTask(p.cat, task);
     else { p.cat.tasks.splice(newTaskIndex(p), 0, task); p.cat.tasks = sortTree(p.cat.tasks); }

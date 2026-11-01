@@ -996,3 +996,33 @@ body.solo .cal-views { display: inline-flex; }
 .cal-now::before { content: ''; position: absolute; left: -4px; top: -5px; width: 8px; height: 8px; border-radius: 50%; background: var(--load-3); }
 .cal-item b, .cal-ev b { font-weight: 650; font-variant-numeric: tabular-nums; }
 .cal-tasks .time { flex: none; font-size: var(--fs-meta); color: var(--accent); font-weight: 650; font-variant-numeric: tabular-nums; }
+
+/* Yapılacaklar: görünüm biçimleri (tam ekran) */
+.todo-views { display: none; align-items: center; gap: 8px; margin-right: 6px; }
+body.solo .todo-views { display: inline-flex; }
+.todo-views select { background: var(--card-2); border: 1px solid var(--line); border-radius: 99px; padding: 3px 10px; font-size: var(--fs-meta); outline: none; color: var(--text); }
+.tv-add { grid-column: 1 / -1; }
+.tv-add input { width: 100%; background: var(--card-2); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; outline: none; }
+.tv-add input:focus { border-color: var(--accent); }
+.tv-empty { padding: 8px 4px; }
+#todoList[data-mode="list"] { display: block; max-width: 880px; margin-left: auto; margin-right: auto; width: 100%; }
+#todoList[data-mode="list"] .cat { background: none; border: 0; padding: 0; margin-bottom: 14px; }
+#todoList[data-mode="list"] .tv-add { margin-bottom: 14px; }
+#todoList[data-mode="board"] { display: flex; align-items: flex-start; gap: 12px; overflow: auto; }
+#todoList[data-mode="board"] .cat { flex: 0 0 300px; max-height: 100%; overflow-y: auto; margin: 0; }
+#todoList[data-mode="board"] .tv-add { flex: 0 0 260px; }
+#todoList[data-mode="board"] .cat li { background: var(--card); border: 1px solid var(--line); margin-bottom: 4px; }
+#todoList[data-mode="board"] .cat li:hover { background: var(--card-3); }
+.cat li .crumb { font-size: var(--fs-meta); color: var(--muted); margin-right: 4px; }
+.cat li .cat-tag { display: inline-flex; align-items: center; gap: 4px; flex: none; font-size: var(--fs-meta); color: var(--muted); margin-top: 1px; }
+/* Öncelik: onay halkasının rengi */
+.cat li[data-p="3"] input[type="checkbox"]:not(:checked) { border-color: var(--load-3); }
+.cat li[data-p="2"] input[type="checkbox"]:not(:checked) { border-color: var(--load-2); }
+.cat li[data-p="1"] input[type="checkbox"]:not(:checked) { border-color: var(--accent); }
+.prio-pop { position: fixed; z-index: 35; display: flex; flex-direction: column; gap: 2px; padding: 6px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,.4); }
+.prio-pop[hidden] { display: none; }
+.prio-pop button { display: flex; align-items: center; gap: 8px; border: 0; background: none; padding: 5px 10px; border-radius: 8px; font-size: var(--fs-sub); text-align: left; }
+.prio-pop button:hover { background: var(--card-2); }
+.prio-pop button.on { color: var(--accent); font-weight: 650; }
+.pdot { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--muted); }
+.pdot[data-p="3"] { border-color: var(--load-3); } .pdot[data-p="2"] { border-color: var(--load-2); } .pdot[data-p="1"] { border-color: var(--accent); }

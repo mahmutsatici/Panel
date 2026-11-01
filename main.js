@@ -257,7 +257,7 @@ function dueSummary(md) {
     if (!t || catDeleted || /<!--\s*silindi/i.test(t[1])) continue;
     const due = (t[1].match(/📅\s*(\d{4}-\d{2}-\d{2})/u) || [])[1];
     if (!due || due > today) continue;
-    const text = t[1].replace(/\s*🔁[^📅<]*/u, '').replace(/\s*📅\s*\S+/u, '').replace(/\s*⏰\s*\S+/u, '').replace(/\s*🔔[^<]*/u, '').replace(/\s*<!--.*?-->/g, '').replace(/[*_`~]/g, '').trim();
+    const text = t[1].replace(/\s*🔁[^📅<]*/u, '').replace(/\s*📅\s*\S+/u, '').replace(/\s*⏰\s*\S+/u, '').replace(/\s*[⏫🔼🔽]/gu, '').replace(/\s*🔔[^<]*/u, '').replace(/\s*<!--.*?-->/g, '').replace(/[*_`~]/g, '').trim();
     (due === today ? todayTasks : overdue).push(text);
   }
   return { todayTasks, overdue };

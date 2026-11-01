@@ -105,6 +105,10 @@
       <div class="card-head">
         <h2>Yapılacaklar <span class="badge" id="todoCount"></span><span class="sync-note" id="syncNote" hidden>⚠</span></h2>
         <div class="actions">
+          <span class="todo-views" id="todoViews">
+            <span class="cal-views"><button type="button" data-m="card">Kart</button><button type="button" data-m="list">Liste</button><button type="button" data-m="board">Pano</button></span>
+            <select id="todoGroup" title="Görevleri grupla"><option value="cat">Kategoriye göre</option><option value="day">Güne göre</option><option value="prio">Önceliğe göre</option><option value="done">Tamamlanmaya göre</option></select>
+          </span>
           <button class="text-btn" id="filterMine" title="Yalnızca bana atanan görevleri göster" hidden>Bana atananlar</button>
           <button class="text-btn" id="toggleDone"></button>
           <button class="text-btn" id="addCat" title="Yeni kategori">＋ Kategori</button>
@@ -137,6 +141,7 @@
 
   <!-- Takvimde tıklanan günün görevleri (günün altında açılan pencere) -->
   <div class="cal-day" id="calDay" hidden></div>
+  <div class="prio-pop" id="prioPop" hidden></div>
 
   <!-- Görev son tarihi ve tekrarı için açılır pencere (js/core.js → pickDate) -->
   <div class="date-pop" id="datePop" hidden></div>
@@ -389,6 +394,7 @@
   <script src="js/weather.js"></script>
   <script src="js/todos.js"></script>
   <script src="js/shared.js"></script>
+  <script src="js/todoviews.js"></script>
   <script src="js/calendar.js"></script>
   <script src="js/reminders.js"></script>
   <script src="js/assistant.js"></script>
