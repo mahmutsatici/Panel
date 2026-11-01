@@ -286,6 +286,7 @@ function setView(id) {
   view = id in CARDS ? id : 'dashboard';
   document.body.classList.toggle('solo', view !== 'dashboard');
   applyLayout();
+  renderCalendar();   // hafta/gün görünümü yalnızca tam ekranda
 }
 function renderNav() {
   const items = [['dashboard', 'Pano'], ...Object.entries(CARDS)];

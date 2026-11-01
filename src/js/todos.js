@@ -206,8 +206,8 @@ function takeBlock(d, dest) {
   return d.cat.tasks.splice(i, blockEnd(d.cat.tasks, i) - i);
 }
 
-function addTask(cat, text, due, rec) {
-  insertTask(cat, { done: false, text, due: due || undefined, rec: rec || undefined, created: stampNow() });
+function addTask(cat, text, due, rec, time) {
+  insertTask(cat, { done: false, text, due: due || undefined, rec: rec || undefined, ...(time && due && !cat.shared ? { time } : {}), created: stampNow() });
   collapsed.delete(cat.name);
   return saveTodos();
 }
