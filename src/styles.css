@@ -316,7 +316,18 @@ select option { background: var(--card); }
   flex: 1; min-width: 0; margin: -3px 0; padding: 2px 8px;
   background: var(--card); border: 1px solid var(--accent); border-radius: 7px; outline: none;
 }
-.cat li input[type="checkbox"] { margin-top: 3px; accent-color: var(--accent); width: 16px; height: 16px; flex: none; cursor: pointer; }
+/* Yuvarlak onay kutusu (Todoist gibi): boş halka → tıklayınca dolu daire ve ✓ */
+.cat li input[type="checkbox"], .cal-day li input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none; margin: 3px 0 0; width: 18px; height: 18px; flex: none; cursor: pointer;
+  border: 1.5px solid var(--muted); border-radius: 50%; background: transparent; display: grid; place-items: center;
+  transition: background .15s, border-color .15s;
+}
+.cat li input[type="checkbox"]::after, .cal-day li input[type="checkbox"]::after {
+  content: ''; width: 4px; height: 8px; margin-top: -2px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg) scale(0); transition: transform .15s;
+}
+.cat li input[type="checkbox"]:hover, .cal-day li input[type="checkbox"]:hover { border-color: var(--accent); background: var(--accent-soft); }
+.cat li input[type="checkbox"]:checked, .cal-day li input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+.cat li input[type="checkbox"]:checked::after, .cal-day li input[type="checkbox"]:checked::after { transform: rotate(45deg) scale(1); }
 .cat li .txt { flex: 1; word-break: break-word; }
 .cat li .txt code { background: var(--code); padding: 0 4px; border-radius: 4px; font-size: .92em; }
 .cat li .txt a { color: var(--accent); }
