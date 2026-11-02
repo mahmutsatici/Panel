@@ -9,6 +9,7 @@ rules_version = '2';
 //   admins/{uid}               yönetici listesi — yalnızca konsoldan yazılır.
 //   istekler/{uid}             izin listesinde olmayan hesabın "beni ekle" isteği (yönetici onaylar → allowed/{uid})
 //   kullanim/{uid}             her istemcinin günlük tahmini okuma/yazma sayısı (yönetici paneli için)
+//   ayarlar/spark              Spark (Gemini) model ayarları — herkes okur, yalnızca yönetici yazar
 //   categories/{cid}           ortak kategori: ad, sahip (e-posta), uyeler (e-posta listesi)
 //   categories/{cid}/tasks/{tid}  görevler
 //
@@ -48,6 +49,18 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['eposta', 'zaman'])
         && request.resource.data.eposta == me()
         && request.resource.data.zaman == request.time;
+    }
+
+    // Ortak uygulama ayarları: aktif hesaplar okur; yalnızca yönetici yazar. Şimdilik tek belge: ayarlar/spark (Gemini model adları).
+    match /ayarlar/{doc} {
+      allow get: if activeUser();
+      allow list, delete: if false;
+      allow create, update: if isAdmin() && doc == 'spark'
+        && request.resource.data.keys().hasOnly(['geminiModel', 'yedekModeller', 'sesModelleri', 'guncelleme'])
+        && request.resource.data.geminiModel is string && request.resource.data.geminiModel.size() <= 100
+        && request.resource.data.yedekModeller is list && request.resource.data.yedekModeller.size() <= 10
+        && request.resource.data.sesModelleri is list && request.resource.data.sesModelleri.size() <= 10
+        && request.resource.data.guncelleme == request.time;
     }
 
     // Kullanım sayacı: her aktif hesap yalnızca kendi belgesine yazar; yönetici hepsini okur.

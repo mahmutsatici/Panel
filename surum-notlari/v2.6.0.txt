@@ -1,0 +1,11 @@
+Panel 2.6.0 — Spark model ayarları yöneticiye taşındı, YouTube Music kaldırıldı
+==============================================================================
+
+ÖNEMLİ: Firebase konsolunda Firestore → Rules sayfasına firebase/firestore.rules dosyasının güncel halini yapıştırıp Publish et
+(yeni "ayarlar/spark" belgesi için kural eklendi).
+
+• Spark (Gemini) model ayarları artık merkezden yönetilir: Ayarlar → Yönetici → "Spark modelleri" bölümünde ana konuşma modeli, yedek modeller
+  ve ses modelleri (▲ ▼ ile sıralanır) yalnızca yönetici tarafından değiştirilir; tüm kullanıcılara girişte uygulanır.
+  Spark ayar sayfasında model alanları kalktı; kullanıcı yalnızca kendi API anahtarını girer.
+• YouTube Music uygulaması entegrasyonu (müzik listeleri, duraklat/sonraki/ses komutları) kaldırıldı. "Şu şarkıyı aç" ya da "chill bir şeyler aç"
+  dediğinde YouTube'da arama sayfası varsayılan tarayıcında açılır; çalmayı sen başlatır ve yönetirsin.

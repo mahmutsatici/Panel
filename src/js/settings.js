@@ -33,16 +33,11 @@ function fillSettingsDialog() {
   $('#cityResults').innerHTML = '';
   $('#nameInput').value = settings.userName || '';
   $('#geminiKeyInput').value = settings.geminiApiKey || '';
-  $('#geminiModelInput').value = settings.geminiModel || '';
   $('#geminiStatus').textContent = settings.geminiApiKey ? '' : 'Henüz anahtar girilmedi; sesli asistan çalışmaz.';
   $('#voiceShortcutLbl').textContent = settings.voiceShortcut.replace('Control', 'Ctrl');
   $('#ttsEnabled').checked = settings.ttsEnabled !== false;
   $('#sparkShared').checked = settings.sparkSeesShared !== false;
   $('#ttsVoice').value = settings.ttsVoice || 'Kore';
-  renderTtsModels();
-  renderFallbackModels();
-  renderMusicLists();
-  refreshYtmStatus();
   $('#sparkSilence').value = String(settings.sparkSilenceMs ?? 1500);
   renderLayoutSettings();
   renderNotifyBackup();
@@ -112,35 +107,6 @@ async function saveSpark(patch) {
   $('#geminiStatus').textContent = 'Kaydedildi ✓';
 }
 $('#geminiKeyInput').addEventListener('change', e => saveSpark({ geminiApiKey: e.target.value.trim() || null }));
-$('#geminiModelInput').addEventListener('change', e => saveSpark({ geminiModel: e.target.value.trim() || null }));
-
-// Model listeleri (ses modelleri, yedek konuşma modelleri): ayarda virgülle ayrılmış metin olarak durur,
-// burada ✕ ile çıkarılan / Ekle ile eklenen satırlar olarak düzenlenir.
-function modelListEditor({ key, list, input, addBtn, emptyText }) {
-  const items = () => String(settings[key] || '').split(',').map(m => m.trim()).filter(Boolean);
-  const render = () => {
-    const models = items();
-    $(list).innerHTML = models.length
-      ? models.map((m, i) => `<li><span>${esc(m)}</span><button type="button" class="icon-btn" data-i="${i}" title="Listeden çıkar">✕</button></li>`).join('')
-      : `<li class="muted">${emptyText}</li>`;
-  };
-  const save = async models => { settings = await api.settings.set({ [key]: models.join(',') }); render(); };
-  $(list).onclick = e => {
-    const i = e.target.closest('button')?.dataset.i;
-    if (i != null) save(items().filter((_, j) => j !== Number(i)));
-  };
-  const add = () => {
-    const v = $(input).value.trim();
-    if (!v) return;
-    $(input).value = '';
-    if (!items().includes(v)) save([...items(), v]);
-  };
-  $(addBtn).onclick = add;
-  $(input).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
-  return render;
-}
-const renderTtsModels = modelListEditor({ key: 'ttsModels', list: '#ttsModelList', input: '#ttsModelAdd', addBtn: '#ttsModelAddBtn', emptyText: 'Model yok — Spark Windows sesiyle konuşur.' });
-const renderFallbackModels = modelListEditor({ key: 'geminiFallbackModels', list: '#fallbackModelList', input: '#fallbackModelAdd', addBtn: '#fallbackModelAddBtn', emptyText: 'Yedek model yok — ana model hata verirse işlem başarısız olur.' });
 
 $('#geminiTest').onclick = async () => {
   $('#geminiStatus').textContent = 'Deneniyor…';
@@ -148,7 +114,6 @@ $('#geminiTest').onclick = async () => {
     // Yazılmış ama henüz odaktan çıkmamış alanlar da denemeye dahil olsun
     settings = await api.settings.set({
       geminiApiKey: $('#geminiKeyInput').value.trim() || null,
-      geminiModel: $('#geminiModelInput').value.trim() || null,
     });
     const res = await api.assistant.test();
     $('#geminiStatus').textContent = res?.speech ? `✓ ${res.speech}` : '✓ Bağlantı kuruldu.';
@@ -157,40 +122,6 @@ $('#geminiTest').onclick = async () => {
   }
 };
 $('#sparkSilence').onchange = async e => { settings = await api.settings.set({ sparkSilenceMs: Number(e.target.value) }); };
-// Müzik listeleri: [{ name, id }] — bağlantıdan list= kimliği ayıklanır
-function renderMusicLists() {
-  const lists = settings.musicLists || [];
-  $('#musicListEl').innerHTML = lists.length
-    ? lists.map((l, i) => `<li><span><b>${esc(l.name)}</b> <span class="muted">${esc(l.id.slice(0, 14))}…</span></span><button type="button" class="icon-btn" data-i="${i}" title="Listeden çıkar">✕</button></li>`).join('')
-    : '<li class="muted">Liste eklenmedi — SPARK arama sonuçlarından çalar.</li>';
-}
-const listIdOf = v => {
-  const t = v.trim();
-  if (/^[A-Za-z0-9_-]{10,}$/.test(t)) return t;
-  try { return new URL(t).searchParams.get('list'); } catch { return null; }
-};
-async function saveMusicLists(lists) {
-  settings = await api.settings.set({ musicLists: lists });
-  renderMusicLists();
-}
-$('#musicAdd').onclick = () => {
-  const name = $('#musicName').value.trim(), id = listIdOf($('#musicUrl').value);
-  if (!name || !id) { $('#ytmStatus').textContent = '⚠ Liste adı ve geçerli bir YouTube Music liste bağlantısı gerekli (…?list=… içermeli).'; return; }
-  $('#musicName').value = $('#musicUrl').value = '';
-  const lists = (settings.musicLists || []).filter(l => l.id !== id && l.name !== name);
-  saveMusicLists([...lists, { name, id }]);
-  refreshYtmStatus();
-};
-$('#musicListEl').onclick = e => {
-  const i = e.target.closest('button')?.dataset.i;
-  if (i != null) saveMusicLists((settings.musicLists || []).filter((_, j) => j !== Number(i)));
-};
-async function refreshYtmStatus() {
-  const r = await api.assistant.system({ type: 'ytm_status' }).catch(() => ({ ok: false }));
-  $('#ytmStatus').textContent = r.ok
-    ? '✓ YouTube Music uygulaması bulundu; müzik orada açılır.'
-    : 'YouTube Music uygulaması (Chrome ile kurulmuş) bulunamadı; müzik tarayıcıda yeni sekmede açılır.';
-}
 $('#sparkShared').onchange = async e => { settings = await api.settings.set({ sparkSeesShared: e.target.checked }); };
 $('#ttsEnabled').onchange = async e => { settings = await api.settings.set({ ttsEnabled: e.target.checked }); };
 $('#ttsVoice').onchange = async e => { settings = await api.settings.set({ ttsVoice: e.target.value }); };
@@ -314,8 +245,6 @@ $('#cityInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.pr
 // Pencere Esc ile ya da dışarıdan kapanırsa, odaktan çıkmadığı için kaydedilmemiş bir anahtar/model kalmasın
 $('#settingsDlg').addEventListener('close', () => {
   $('#openSettings').classList.remove('on');
-  const key = $('#geminiKeyInput').value.trim() || null, model = $('#geminiModelInput').value.trim() || null;
-  if (key !== (settings.geminiApiKey || null) || model !== (settings.geminiModel || null)) {
-    api.settings.set({ geminiApiKey: key, geminiModel: model }).then(s => { settings = s; });
-  }
+  const key = $('#geminiKeyInput').value.trim() || null;
+  if (key !== (settings.geminiApiKey || null)) api.settings.set({ geminiApiKey: key }).then(s => { settings = s; });
 });

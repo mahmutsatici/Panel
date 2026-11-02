@@ -230,10 +230,6 @@ function weatherContext() {
 function tasksContext(typedText) {
   const now = new Date(), today = todayISO();
   const lines = [`Şu an: ${today} (${fmtLongDay.format(parseISODate(today))}) saat ${fmtTime.format(now)}`, '', weatherContext(), '', 'Görev listesi:'];
-  const lists = (settings.musicLists || []).map(l => l.name);
-  lines.push(lists.length
-    ? `Müzik listelerim (play_music için music_list alanına AYNEN bu adlardan birini yaz):\n${lists.map(n => `- ${n}`).join('\n')}`
-    : 'Müzik listelerim: tanımlı değil.', '');
   ctxTasks = new Map();
   let n = 0;
   for (const cat of activeCats()) {
@@ -501,7 +497,7 @@ async function stopAndSend() {
 // Gemini'nin görevler üzerinde yapabildiği işlemler (todos.js'teki aynı fonksiyonlar kullanılır,
 // böylece elle yapılan işlemle birebir aynı sonucu verir: tekrarlayan görev, silinenler işareti vb.)
 const TASK_ACTIONS = new Set(['complete_task', 'reopen_task', 'delete_task', 'update_task']);
-const SYSTEM_ACTIONS = new Set(['open_url', 'play_music', 'media_control']);
+const SYSTEM_ACTIONS = new Set(['open_url', 'play_music']);
 const LEGACY_TYPES = new Set(['add_task', ...TASK_ACTIONS]);
 // Eski tek-işlem biçimi gelirse (type: "add_task" vb.) actions dizisine çevir
 function actionsOf(res) {
@@ -574,11 +570,11 @@ async function handleResponse(res) {
     } else if (TASK_ACTIONS.has(a.action)) {
       if (await applyTaskAction(a)) changed++; else failed++;
     } else if (SYSTEM_ACTIONS.has(a.action)) {
-      // Tarayıcıda sayfa aç / YouTube Music çal / medya tuşu (ana süreç yapar)
-      const call = api.assistant.system({ type: a.action, url: a.url, query: a.music_query, kind: a.music_kind, list: a.music_list, key: a.media_key })
+      // Tarayıcıda sayfa aç / YouTube'da müzik ara (ana süreç yapar)
+      const call = api.assistant.system({ type: a.action, url: a.url, query: a.music_query })
         .catch(e => ({ ok: false, message: cleanErr(e) }));
       if (a.action === 'play_music') {
-        // Müziğin açılması 10-20 sn sürebilir; SPARK cevabını beklemeden verir, hata olursa sohbete düşer
+        // Tarayıcı açılışı biraz sürebilir; SPARK cevabını beklemeden verir, hata olursa sohbete düşer
         sys++;
         call.then(r => { if (!r.ok) { const msg = r.message || 'Müziği açamadım.'; showExchange(res.heard, msg); addLog('', msg, 'error'); } });
       } else {

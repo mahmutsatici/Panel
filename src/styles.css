@@ -1297,3 +1297,7 @@ button.cat-tag:hover { background: var(--card-3); color: var(--text); }
 .list-pop button:hover { background: var(--card-2); }
 .list-pop button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .list-pop .ico { width: 14px; height: 14px; flex: none; }
+
+/* Yönetici: model listesi sıralama düğmeleri */
+.model-list .ml-act { display: inline-flex; gap: 2px; }
+.model-list .ml-act .icon-btn:disabled { opacity: .3; cursor: default; }

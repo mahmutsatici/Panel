@@ -60,6 +60,7 @@ cloud.loadProfile = async () => {
     u.error = null;
     if (u.active) {
       u.admin = (await sdk.getDoc(sdk.doc(cloud.db, 'admins', u.uid))).exists();
+      cloud.loadSparkConfig();
       setTimeout(() => cloud.reportUsage().catch(() => {}), 60 * 1000);
     } else {
       try {
@@ -71,6 +72,27 @@ cloud.loadProfile = async () => {
   } catch (e) { u.error = e.code || e.message; }
   cloudChanged();
 };
+
+// Spark (Gemini) model ayarları yönetici tarafından merkezden belirlenir (ayarlar/spark): giriş yapılınca okunur ve yerel ayarlara uygulanır.
+// Belge yoksa ya da giriş yoksa yerel varsayılanlar geçerli kalır.
+cloud.sparkConfig = null;
+cloud.loadSparkConfig = async () => {
+  try {
+    const snap = await fsd().getDoc(fsd().doc(cloud.db, 'ayarlar', 'spark'));
+    cloud.count(1, 0);
+    if (!snap.exists()) return;
+    const d = snap.data();
+    cloud.sparkConfig = { geminiModel: d.geminiModel || '', yedekModeller: d.yedekModeller || [], sesModelleri: d.sesModelleri || [] };
+    await applySparkConfig();
+  } catch (e) { console.error('Spark ayarları okunamadı', e); }
+};
+async function applySparkConfig() {
+  const c = cloud.sparkConfig;
+  if (!c) return;
+  const patch = { geminiModel: c.geminiModel || settings.geminiModel, geminiFallbackModels: c.yedekModeller.join(','), ttsModels: c.sesModelleri.join(',') };
+  if (Object.keys(patch).every(k => patch[k] === settings[k])) return;
+  settings = await api.settings.set(patch);
+}
 
 // Oturum durumu değişince dinleyenleri (hesap sayfası, ileride ortak kategoriler) haberdar et
 function cloudChanged() { cloud.listeners.forEach(fn => { try { fn(cloud.user); } catch (e) { console.error(e); } }); }
@@ -223,6 +245,8 @@ const adminList = async name => {
   return snap.docs.map(d => { const x = d.data({ serverTimestamps: 'estimate' }); return { ...x, id: d.id, zaman: tsMs(x.zaman), guncelleme: tsMs(x.guncelleme) }; });
 };
 cloud.admin = {
+  setSparkConfig: c => (cloud.count(0, 1), fsd().setDoc(fsd().doc(cloud.db, 'ayarlar', 'spark'), { geminiModel: c.geminiModel, yedekModeller: c.yedekModeller, sesModelleri: c.sesModelleri, guncelleme: cloud.now() })
+    .then(() => { cloud.sparkConfig = c; return applySparkConfig(); })),
   listAllowed: () => adminList('allowed'),
   listRequests: () => adminList('istekler'),
   listUsage: () => adminList('kullanim'),

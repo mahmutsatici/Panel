@@ -97,6 +97,19 @@ describe('izin listesi ve giriş', () => {
     await assertSucceeds(getDocs(collection(db(ADMIN), 'istekler')));
     await assertSucceeds(deleteDoc(doc(db(ADMIN), 'istekler', YABANCI.uid)));
   });
+  test('ayarlar/spark: aktif hesap okur, yalnızca yönetici yazar; geçersiz belge reddedilir', async () => {
+    const ok = () => ({ geminiModel: 'gemini-flash-lite-latest', yedekModeller: ['m2'], sesModelleri: ['t1', 't2'], guncelleme: serverTimestamp() });
+    await assertSucceeds(setDoc(doc(db(ADMIN), 'ayarlar', 'spark'), ok()));
+    await assertFails(setDoc(doc(db(ALI), 'ayarlar', 'spark'), ok()));                                    // yönetici değil
+    await assertSucceeds(getDoc(doc(db(ALI), 'ayarlar', 'spark')));
+    await assertFails(getDoc(doc(db(PASIF), 'ayarlar', 'spark')));                                       // pasif hesap okuyamaz
+    await assertFails(getDoc(doc(anon(), 'ayarlar', 'spark')));
+    await assertFails(setDoc(doc(db(ADMIN), 'ayarlar', 'baska'), ok()));                                 // yalnızca spark belgesi
+    await assertFails(setDoc(doc(db(ADMIN), 'ayarlar', 'spark'), { ...ok(), yedekModeller: 'x' }));
+    await assertFails(setDoc(doc(db(ADMIN), 'ayarlar', 'spark'), { ...ok(), sesModelleri: Array(11).fill('m') }));
+    await assertFails(setDoc(doc(db(ADMIN), 'ayarlar', 'spark'), { ...ok(), fazla: 1 }));
+    await assertFails(getDocs(collection(db(ADMIN), 'ayarlar')));
+  });
   test('kullanım sayacı: aktif hesap yalnızca kendi belgesine yazar; yönetici hepsini okur', async () => {
     const ok = { eposta: CAN.email, gun: '2026-10-27', okuma: 12, yazma: 3, guncelleme: serverTimestamp() };
     await assertSucceeds(setDoc(doc(db(CAN), 'kullanim', CAN.uid), ok));

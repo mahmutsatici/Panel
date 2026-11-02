@@ -246,6 +246,21 @@
             <div id="admAllowed"></div>
             <h3>Bugünkü tahmini kullanım</h3>
             <div id="admUsage"></div>
+            <h3>Spark modelleri</h3>
+            <p class="muted">Tüm kullanıcılar bu modelleri kullanır (girişte uygulanır). Listeler yukarıdan aşağıya sırayla denenir; ▲ ▼ ile sırayı değiştirirsin.</p>
+            <label>Konuşma modeli
+              <input id="admGeminiModel" placeholder="ör. gemini-flash-lite-latest" autocomplete="off" spellcheck="false">
+            </label>
+            <div class="field"><span>Yedek konuşma modelleri <span class="muted">(ana model yoğunsa ya da hata verirse sırayla denenir)</span></span>
+              <ul class="model-list" id="admFallbackList"></ul>
+              <div class="row"><input id="admFallbackAdd" placeholder="Model kimliği ekle…" autocomplete="off" spellcheck="false"><button type="button" id="admFallbackAddBtn">Ekle</button></div>
+            </div>
+            <div class="field"><span>Ses modelleri <span class="muted">(birinin günlük kotası dolunca sıradakine geçilir)</span></span>
+              <ul class="model-list" id="admTtsList"></ul>
+              <div class="row"><input id="admTtsAdd" list="ttsModelSuggest" placeholder="Model kimliği ekle…" autocomplete="off" spellcheck="false"><button type="button" id="admTtsAddBtn">Ekle</button></div>
+            </div>
+            <datalist id="ttsModelSuggest"><option value="gemini-2.5-flash-preview-tts"><option value="gemini-2.5-pro-preview-tts"></datalist>
+            <p class="muted" id="admSparkMsg"></p>
             <div class="row"><button type="button" id="admRefresh">Yenile</button></div>
             <p class="muted">Yeni kişi: Firebase konsolunda Authentication → Users'tan hesabı aç, e-posta ve şifreyi kişiye ver. Kişi Panel'e girince burada "Bekleyen istekler"de görünür; adını yazıp Onayla'ya bas. Kullanım rakamları istemcilerin bildirdiği <b>tahmindir</b>; kesin değer Firebase konsolundaki Usage sayfasındadır.</p>
           </section>
@@ -259,17 +274,7 @@
             <label>API anahtarı
               <input id="geminiKeyInput" type="password" placeholder="AIza…" autocomplete="off" spellcheck="false">
             </label>
-            <label>Konuşma modeli
-              <input id="geminiModelInput" placeholder="ör. gemini-flash-lite-latest" autocomplete="off" spellcheck="false">
-            </label>
-            <p class="muted">Google AI Studio'daki listeden <b>"Flash Lite"</b> etiketli bir modelin tam kimliğini yapıştır; günlük en yüksek ücretsiz kullanım hakkı onda. Alanlar değiştikçe kendiliğinden kaydedilir.</p>
-            <div class="field"><span>Yedek konuşma modelleri <span class="muted">(ana model yoğunsa ya da hata verirse sırayla denenir)</span></span>
-              <ul class="model-list" id="fallbackModelList"></ul>
-              <div class="row">
-                <input id="fallbackModelAdd" list="ttsModelSuggest" placeholder="Model kimliği ekle…" autocomplete="off" spellcheck="false">
-                <button type="button" id="fallbackModelAddBtn">Ekle</button>
-              </div>
-            </div>
+            <p class="muted" id="sparkModelsInfo">Konuşma ve ses modellerini yönetici belirler; burada ayar yapmana gerek yok.</p>
             <div class="row">
               <button type="button" id="geminiTest">Bağlantıyı dene</button>
             </div>
@@ -296,29 +301,8 @@
                 <button type="button" id="ttsPreview">▶ Dinle</button>
               </div>
             </label>
-            <div class="field"><span>Ses modelleri <span class="muted">(yukarıdan aşağıya sırayla denenir)</span></span>
-              <ul class="model-list" id="ttsModelList"></ul>
-              <div class="row">
-                <input id="ttsModelAdd" list="ttsModelSuggest" placeholder="Model kimliği ekle…" autocomplete="off" spellcheck="false">
-                <button type="button" id="ttsModelAddBtn">Ekle</button>
-              </div>
-              <datalist id="ttsModelSuggest">
-                <option value="gemini-2.5-flash-preview-tts">
-                <option value="gemini-2.5-pro-preview-tts">
-              </datalist>
-            </div>
-            <p class="muted">Ücretsiz ses kotası model başına günde yaklaşık 10 cevaptır. Google AI Studio'daki "TTS" etiketli modelleri listeye ekleyerek günlük hakkı artırabilirsin; biri dolunca sıradakine geçilir, hepsi dolunca Windows sesine dönülür. "Dinle" de bir hak kullanır.</p>
-            <h3>Müzik (YouTube Music)</h3>
-            <p class="muted" id="ytmStatus"></p>
-            <div class="field"><span>Müzik listelerim <span class="muted">(SPARK önce bunlardan seçer ve karışık çalar)</span></span>
-              <ul class="model-list" id="musicListEl"></ul>
-              <div class="row">
-                <input id="musicName" placeholder="Liste adı (ör. Chill)" autocomplete="off" maxlength="40">
-                <input id="musicUrl" placeholder="Liste bağlantısı (music.youtube.com/playlist?list=…)" autocomplete="off" spellcheck="false">
-                <button type="button" id="musicAdd">Ekle</button>
-              </div>
-            </div>
-            <p class="muted">YouTube Music'te listeyi aç, adres çubuğundaki ya da paylaşım bağlantısını yapıştır. "Chill bir şeyler aç", "şu şarkıyı aç", "sonraki şarkı", "duraklat" gibi isteklerin sesli ya da yazılı çalışır.</p>
+            <h3>Müzik</h3>
+            <p class="muted">"Şu şarkıyı aç", "chill bir şeyler aç" gibi isteklerin YouTube'da varsayılan tarayıcında açılır. Çalmayı tarayıcıdan sen başlatır ve yönetirsin.</p>
             <p class="muted">Sesin ve görev listenin metni yalnızca konuştuğun anda Google'ın sunucularına gönderilir; başka hiçbir yere kaydedilmez.</p>
           </section>
 

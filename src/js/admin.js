@@ -13,6 +13,7 @@ async function renderAdmin() {
     renderAdminRequests(requests.filter(r => !allowed.some(a => a.id === r.id)));
     renderAdminAllowed(allowed);
     renderAdminUsage(usage.filter(u => u.gun === todayISO()));
+    renderSparkModels();
   } catch (e) { st.textContent = `Okunamadı: ${cloudErrorText(e)}`; }
 }
 
@@ -85,3 +86,53 @@ async function adminDo(fn) {
   renderAdmin();
 }
 $('#admRefresh').onclick = renderAdmin;
+
+// ---- Spark modelleri (herkes için merkezden): ayarlar/spark belgesi; değişiklik anında kaydedilir ve bu uygulamaya da uygulanır ----
+let admSpark = { geminiModel: '', yedekModeller: [], sesModelleri: [] };
+function renderSparkModels() {
+  admSpark = cloud.sparkConfig ? { ...cloud.sparkConfig } : {
+    geminiModel: settings.geminiModel || '',
+    yedekModeller: String(settings.geminiFallbackModels || '').split(',').map(x => x.trim()).filter(Boolean),
+    sesModelleri: String(settings.ttsModels || '').split(',').map(x => x.trim()).filter(Boolean),
+  };
+  $('#admGeminiModel').value = admSpark.geminiModel;
+  drawModelList('#admFallbackList', 'yedekModeller', 'Yedek model yok — ana model hata verirse işlem başarısız olur.');
+  drawModelList('#admTtsList', 'sesModelleri', 'Model yok — Spark Windows sesiyle konuşur.');
+}
+async function saveSparkModels() {
+  $('#admSparkMsg').textContent = 'Kaydediliyor…';
+  try {
+    await cloud.admin.setSparkConfig({ geminiModel: admSpark.geminiModel.trim(), yedekModeller: admSpark.yedekModeller, sesModelleri: admSpark.sesModelleri });
+    $('#admSparkMsg').textContent = 'Kaydedildi ✓ Kullanıcılara bir sonraki girişlerinde uygulanır.';
+  } catch (e) { $('#admSparkMsg').textContent = `Olmadı: ${cloudErrorText(e)}`; }
+}
+function drawModelList(sel, key, empty) {
+  const items = admSpark[key];
+  $(sel).innerHTML = items.length
+    ? items.map((m, i) => `<li><span>${esc(m)}</span><span class="ml-act"><button type="button" class="icon-btn" data-up="${i}" title="Yukarı" ${i ? '' : 'disabled'}>▲</button><button type="button" class="icon-btn" data-dn="${i}" title="Aşağı" ${i < items.length - 1 ? '' : 'disabled'}>▼</button><button type="button" class="icon-btn" data-rm="${i}" title="Listeden çıkar">✕</button></span></li>`).join('')
+    : `<li class="muted">${empty}</li>`;
+  $(sel).onclick = e => {
+    const b = e.target.closest('button');
+    if (!b || b.disabled) return;
+    const arr = admSpark[key], d = b.dataset;
+    if (d.rm != null) arr.splice(+d.rm, 1);
+    else if (d.up != null) [arr[+d.up - 1], arr[+d.up]] = [arr[+d.up], arr[+d.up - 1]];
+    else if (d.dn != null) [arr[+d.dn + 1], arr[+d.dn]] = [arr[+d.dn], arr[+d.dn + 1]];
+    else return;
+    drawModelList(sel, key, empty);
+    saveSparkModels();
+  };
+}
+function bindModelAdd(input, btn, key, sel, empty) {
+  const add = () => {
+    const v = $(input).value.trim();
+    if (!v) return;
+    $(input).value = '';
+    if (!admSpark[key].includes(v)) { admSpark[key].push(v); drawModelList(sel, key, empty); saveSparkModels(); }
+  };
+  $(btn).onclick = add;
+  $(input).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+}
+bindModelAdd('#admFallbackAdd', '#admFallbackAddBtn', 'yedekModeller', '#admFallbackList', 'Yedek model yok — ana model hata verirse işlem başarısız olur.');
+bindModelAdd('#admTtsAdd', '#admTtsAddBtn', 'sesModelleri', '#admTtsList', 'Model yok — Spark Windows sesiyle konuşur.');
+$('#admGeminiModel').addEventListener('change', e => { admSpark.geminiModel = e.target.value.trim(); if (admSpark.geminiModel) saveSparkModels(); });
