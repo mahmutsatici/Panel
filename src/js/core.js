@@ -211,6 +211,59 @@ function commitDate(patch, close) {
   // Liste yeniden çizilince bağlı düğme yok olabilir; o zaman pencere olduğu yerde kalsın
   if (close) closeDatePop(); else { renderDatePop(); positionDatePop(); }
 }
+// ---- Açılır liste (select yerine): uygulamanın kendi tasarımında seçenek listesi ----
+// openListPop(anchor, [{value, label}], current, onPick): düğmenin altında (yer yoksa üstünde) açılır; seçili olan ✓ ile işaretlenir.
+const listPop = document.createElement('div');
+listPop.className = 'list-pop';
+listPop.hidden = true;
+document.body.append(listPop);
+let listPopAnchor = null;
+function closeListPop() { listPop.hidden = true; listPopAnchor = null; }
+function openListPop(anchor, items, current, onPick) {
+  listPopAnchor = anchor;
+  listPop.innerHTML = items.map((o, i) => `<button type="button" data-i="${i}" class="${String(o.value) === String(current) ? 'on' : ''}"><span>${esc(o.label)}</span>${String(o.value) === String(current) ? ico('check') : ''}</button>`).join('');
+  listPop.querySelectorAll('button').forEach(b => b.onclick = () => { closeListPop(); onPick(items[+b.dataset.i].value); });
+  listPop.hidden = false;
+  const r = anchor.getBoundingClientRect();
+  listPop.style.minWidth = `${Math.max(r.width, 140)}px`;
+  const w = listPop.offsetWidth, h = listPop.offsetHeight;
+  listPop.style.left = `${Math.min(Math.max(8, r.left), innerWidth - w - 8)}px`;
+  listPop.style.top = `${Math.max(8, r.bottom + 4 + h > innerHeight - 8 ? r.top - h - 4 : r.bottom + 4)}px`;
+  listPop.querySelector('.on')?.scrollIntoView({ block: 'nearest' });
+}
+document.addEventListener('mousedown', e => { if (!listPop.hidden && !e.target.closest('.list-pop') && !listPopAnchor?.contains(e.target)) closeListPop(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !listPop.hidden) { closeListPop(); e.stopPropagation(); } }, true);
+// Yerel <select>'i gizleyip yerine düğme + özel liste koyar; select.value ve "change" olayı aynen çalışır
+function enhanceSelect(sel) {
+  if (sel._enh) return;
+  sel._enh = true;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'sel-btn';
+  btn.title = sel.title || '';
+  sel.after(btn);
+  sel.style.display = 'none';
+  const label = () => { const o = sel.options[sel.selectedIndex]; btn.innerHTML = `<span>${esc(o ? o.textContent : '')}</span>${ico('chev-d')}`; };
+  const desc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value');
+  Object.defineProperty(sel, 'value', { get() { return desc.get.call(this); }, set(v) { desc.set.call(this, v); label(); } });   // kodla değer atanınca etiket güncellensin
+  sel.addEventListener('change', label);
+  new MutationObserver(label).observe(sel, { childList: true });   // seçenekler sonradan eklenirse (ör. ses listesi)
+  btn.onclick = () => {
+    if (listPopAnchor === btn && !listPop.hidden) return closeListPop();
+    openListPop(btn, [...sel.options].map(o => ({ value: o.value, label: o.textContent })), sel.value, v => { sel.value = v; sel.dispatchEvent(new Event('change', { bubbles: true })); });
+  };
+  label();
+}
+
+// Yerel <datalist> önerileri yerine aynı özel liste (giriş kutusuna tıklayınca açılır)
+function enhanceDatalist(input) {
+  const opts = [...document.querySelectorAll(`#${input.getAttribute('list')} option`)].map(o => ({ value: o.value, label: o.value }));
+  input.removeAttribute('list');
+  const open = () => openListPop(input, opts, input.value, v => { input.value = v; input.dispatchEvent(new Event('input', { bubbles: true })); input.focus(); });
+  input.addEventListener('focus', open);
+  input.addEventListener('click', () => { if (listPop.hidden) open(); });
+}
+
 // ---- Saat seçici: 15 dakikalık adımlarla kaydırılabilir liste (her satır bir saat: SS:00 SS:15 SS:30 SS:45) ----
 const TIME_MINS = ['00', '15', '30', '45'];
 const timeOpts = Array.from({ length: 96 }, (_, i) => `${String(i >> 2).padStart(2, '0')}:${TIME_MINS[i & 3]}`);
@@ -257,7 +310,7 @@ function renderDatePop() {
       <div class="dp-chips">${REMIND_PRESETS.map(([n, l]) => `<button type="button" data-remind="${n}dk" class="${s.remind.includes(n + 'dk') ? 'on' : ''}" ${s.time ? '' : 'disabled'}>${s.remind.includes(n + 'dk') ? ico('check') : ''}${l}</button>`).join('')}</div>
       ${s.time ? '' : '<p class="dp-hint">Bu seçenekler için görevin saati olmalı. <button type="button" class="dp-link" data-view="time">Saat seç</button></p>'}
       <div class="dp-sub">Belirli zaman</div>
-      <div class="dp-radd-row"><input type="date" class="dp-rd" value="${s.due || today}" aria-label="Hatırlatma günü">
+      <div class="dp-radd-row"><button type="button" class="dp-rd-btn" aria-label="Hatırlatma günü">${ico('calendar')}<span>${fmtShortDay.format(parseISODate(s.remDate || s.due || today))}</span>${ico('chev-d')}</button>
         <button type="button" class="dp-rt-btn" aria-label="Hatırlatma saati">${ico('clock')}<span>${s.remTime || (s.time && timeOpts.includes(s.time) ? s.time : '09:00')}</span>${ico('chev-d')}</button>
         <button type="button" class="dp-radd" title="Hatırlatıcı ekle">${ico('plus')}Ekle</button></div>
       ${customRem.length ? `<div class="dp-chips">${customRem.map(t => `<span class="dp-tok">${esc(remindLabel(t))}<button type="button" data-remind="${t}" title="Kaldır" aria-label="Kaldır">${ico('x')}</button></span>`).join('')}</div>` : ''}`;
@@ -334,10 +387,17 @@ function renderDatePop() {
     const t = b.dataset.remind;
     commitDate({ remind: s.remind.includes(t) ? s.remind.filter(x => x !== t) : [...s.remind, t] }, false);
   });
+  const rdBtn = datePop.querySelector('.dp-rd-btn');
+  if (rdBtn) rdBtn.onclick = () => {
+    const cur = s.remDate || s.due || today;
+    const days = Array.from({ length: 120 }, (_, i) => addDays(today, i));
+    if (!days.includes(cur)) days.unshift(cur);
+    openListPop(rdBtn, days.map(d => ({ value: d, label: `${fmtLong.format(parseISODate(d))}${d === today ? ' · Bugün' : d === addDays(today, 1) ? ' · Yarın' : ''}` })), cur, d => { s.remDate = d; renderDatePop(); });
+  };
   const rtBtn = datePop.querySelector('.dp-rt-btn');
   if (rtBtn) rtBtn.onclick = () => pickTime(rtBtn, rtBtn.querySelector('span').textContent, t => { s.remTime = t || '09:00'; renderDatePop(); });
   datePop.querySelector('.dp-radd')?.addEventListener('click', () => {
-    const t = `${datePop.querySelector('.dp-rd').value}T${datePop.querySelector('.dp-rt-btn span').textContent}`;
+    const t = `${s.remDate || s.due || today}T${datePop.querySelector('.dp-rt-btn span').textContent}`;
     if (REMIND_RE.test(t) && !s.remind.includes(t)) commitDate({ remind: [...s.remind, t] }, false);
   });
   datePop.querySelector('.dp-done').onclick = closeDatePop;
@@ -345,8 +405,9 @@ function renderDatePop() {
 const WEEKDAY_SHORT = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 const fmtMonthYear = new Intl.DateTimeFormat('tr-TR', { month: 'long', year: 'numeric' });
 const fmtLong = new Intl.DateTimeFormat('tr-TR', { weekday: 'long', day: 'numeric', month: 'long' });
+const fmtShortDay = new Intl.DateTimeFormat('tr-TR', { weekday: 'short', day: 'numeric', month: 'short' });
 document.addEventListener('mousedown', e => {
-  if (datePopState && !e.target.closest('#datePop, #timePop') && !datePopState.anchor.contains(e.target)) closeDatePop();
+  if (datePopState && !e.target.closest('#datePop, #timePop, .list-pop') && !datePopState.anchor.contains(e.target)) closeDatePop();
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && datePopState) closeDatePop(); });
 

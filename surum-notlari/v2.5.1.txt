@@ -1,0 +1,7 @@
+Panel 2.5.1 — Küçük düzeltmeler
+===============================
+
+• Takvim gün penceresinde görev metni artık kısaltılmaz; uzunsa alt satıra iner.
+• Satırın üzerine gelince çıkan düğmeler (öncelik, alt görev, sil...) artık tarih/saat düğmesinin hemen soluna açılır; sağda boş yer kalmaz.
+• Açılır listeler uygulamanın kendi tasarımında: görünüm/gruplama/sütun seçimi, ayarlardaki tüm listeler (tema, Spark sessizlik süresi, ses...),
+  model önerileri ve hatırlatıcıdaki gün seçimi (yerel tarayıcı listeleri yerine).

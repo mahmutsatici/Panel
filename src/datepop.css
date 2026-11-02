@@ -177,3 +177,9 @@
 .dp-rt-btn:hover { border-color: var(--accent); }
 .dp-rt-btn .ico { width: 14px; height: 14px; }
 .dp-rt-btn .ico:last-child { color: var(--muted); }
+
+/* Hatırlatıcı günü: düğme (yerel tarih kutusu yerine gün listesi) */
+.dp-rd-btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--card-2); color: var(--text); border-radius: 8px; padding: 3px 8px; font-size: var(--fs-sub); }
+.dp-rd-btn:hover { border-color: var(--accent); }
+.dp-rd-btn .ico { width: 14px; height: 14px; }
+.dp-rd-btn .ico:last-child { color: var(--muted); }

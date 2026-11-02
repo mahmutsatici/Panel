@@ -17,6 +17,8 @@ async function init() {
 
   renderGreeting();
   applyClockMode();   // saat görünümünü uygular ve ilk kez çizer
+  document.querySelectorAll('select').forEach(enhanceSelect);
+  document.querySelectorAll('input[list]').forEach(enhanceDatalist);   // yerel açılır listeler yerine uygulamanın kendi listesi
   setInterval(tickClock, 1000);
   await Promise.all([loadTodos(), loadNoteList()]);
   const last = store.get('lastNote', null);
