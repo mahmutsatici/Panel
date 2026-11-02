@@ -3,6 +3,7 @@
 // Tam ekranda Hafta ve Gün görünümü de vardır (saat çizelgesi: saati olan görevler saatinde, olmayanlar "Gün boyu" şeridinde).
 // Bir güne tıklayınca o güne ait görevler kartın altında listelenir; oradan işaretlenebilir / eklenebilir.
 const fmtMonth = new Intl.DateTimeFormat('tr-TR', { month: 'long', year: 'numeric' });
+const fmtDateLong = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
 const fmtFullDay = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'long', year: 'numeric', weekday: 'long' });
 const WEEKDAYS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 let calMonth = (() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); })();
@@ -10,6 +11,7 @@ let calSelected = todayISO();
 let calDayOpen = false;   // seçili günün görev penceresi açık mı
 let calAddCat = null;     // gün penceresinden eklenecek görevin kategorisi
 let calAddTime = null;    // gün penceresinden eklenecek görevin saati (çizelgede boş bir saate tıklanınca dolar)
+let calAddDraft = '';     // gün penceresinde yazılmakta olan görev metni (kategori/saat değişince ya da yeniden çizilince korunur)
 let calAnchorPt = null;   // çizelgede tıklanan nokta {x, y}: gün penceresi buraya yakın açılır
 let calView = store.get('calView', 'month');   // 'month' | 'week' | 'day'; hafta ve gün yalnızca tam ekranda
 let calDate = todayISO();                      // hafta/gün görünümünün gösterdiği gün
@@ -33,6 +35,7 @@ function closeCalDay() {
   $('#calDay').hidden = true;
   calAnchorPt = null;
   calAddTime = null;
+  calAddDraft = '';
   document.querySelectorAll('.cal-d.sel, .cal-col-head.sel').forEach(c => c.classList.remove('sel'));
   document.querySelectorAll('.cal-pick').forEach(c => c.remove());   // pencere kapanınca seçim işareti de kalkar
 }
@@ -218,8 +221,6 @@ function renderCalDay(byDue) {
   const overdue = calSelected === today
     ? allTasks().filter(x => x.task.due && x.task.due < today && !x.task.done)
     : [];
-  const diff = dayDiff(calSelected);
-  const rel = diff === 0 ? 'Bugün' : diff === 1 ? 'Yarın' : diff === -1 ? 'Dün' : '';
   const d = parseISODate(calSelected);
   const cats = activeCats();
   if (!cats.some(c => c.name === calAddCat)) calAddCat = currentCat().name;
@@ -230,9 +231,8 @@ function renderCalDay(byDue) {
     <div class="cd-head">
       <button type="button" class="cd-nav" data-d="-1" title="Önceki gün">${ico('chev-l')}</button>
       <div class="cd-date">
-        <span class="cd-num">${d.getDate()}</span>
-        <span class="cd-info"><b>${fmtWeekday.format(d)}</b><span>${fmtMonth.format(d)} · ${isoWeek(d)}. hafta</span></span>
-        ${rel ? `<span class="cd-rel">${rel}</span>` : ''}
+        <b class="cd-full">${fmtDateLong.format(d)}</b>
+        <span class="cd-wd">${fmtWeekday.format(d)}</span>
       </div>
       <button type="button" class="cd-nav" data-d="1" title="Sonraki gün">${ico('chev-r')}</button>
       <button type="button" class="icon-btn cal-close" title="Kapat (Esc)">✕</button>
@@ -264,6 +264,8 @@ function renderCalDay(byDue) {
   box.querySelector('.cal-close').onclick = e => { e.stopPropagation(); closeCatPop(); closeCalDay(); };
   box.querySelectorAll('.cd-nav').forEach(b => b.onclick = () => openCalDay(addDays(calSelected, +b.dataset.d)));
   const form = box.querySelector('.cd-add'), input = form.querySelector('input');
+  input.value = calAddDraft;
+  input.addEventListener('input', () => { calAddDraft = input.value; });
   const catBtn = form.querySelector('.cd-catbtn');
   catBtn.onclick = () => pickCategory(catBtn, calAddCat, name => { calAddCat = name; renderCalDay(byDue); $('#calDay .cd-add input')?.focus(); });
   const timeBtn = form.querySelector('.cd-timebtn');
@@ -281,8 +283,7 @@ function renderCalDay(byDue) {
     if (!text) return;
     const cat = activeCats().find(c => c.name === calAddCat) || currentCat();
     const time = parsed.time || nl.time || calAddTime;
-    calAddTime = null;
-    addTask(cat, text, calSelected, parsed.rec || nl.rec, time, { priority: parsed.priority, remind: parsed.remind }).then(() => $('#calDay .cd-add input')?.focus());
+    addTask(cat, text, calSelected, parsed.rec || nl.rec, time, { priority: parsed.priority, remind: parsed.remind }).then(closeCalDay);   // eklenince pencere kapanır
   };
 }
 
@@ -300,12 +301,17 @@ function calDayRow({ cat, task }, late) {
     + (task.remind?.length ? `<span class="bell" title="Hatırlatıcı var">${ico('bell')}</span>` : '')
     + `<button type="button" class="cd-t${task.time ? '' : ' none'}" title="Gün / saat / hatırlatıcı">${task.time || ico('clock')}</button>`
     + (late ? `<span class="late-tag">${dueInfo(task.due, false).label}</span>` : '')
-    + `<span class="cat-tag">${cat.icon ? `<span class="cat-ico">${cat.icon}</span>` : '<span class="dot"></span>'}${esc(cat.name)}</span>`
+    + `<button type="button" class="cat-tag cd-cat" title="Kategoriyi değiştir">${cat.icon ? `<span class="cat-ico">${cat.icon}</span>` : '<span class="dot"></span>'}${esc(cat.name)}</button>`
+    + `<button type="button" class="cd-prio${task.priority ? ' set' : ''}" title="Öncelik">${ico('flag')}</button>`
     + '<button type="button" class="cd-del" title="Sil">✕</button>';
   li.querySelector('input').onchange = e => setDone(cat, task, e.target.checked);
   const tb = li.querySelector('.cd-t');
   tb.onclick = () => pickDate(tb, { due: task.due, rec: task.rec, time: task.time, remind: task.remind }, v => setDueRec(task, v));
   li.querySelector('.cd-del').onclick = () => { deleteTask(cat, task); saveTodos(); };
+  const cb = li.querySelector('.cd-cat');
+  cb.onclick = () => pickCategory(cb, cat.name, name => { const dest = activeCats().find(c => c.name === name); if (dest) moveToCategory(cat, task, dest); });
+  const pb = li.querySelector('.cd-prio');
+  pb.onclick = () => pickPriority(pb, task.priority || 0, n => { task.priority = n || undefined; saveTodos(); });
   li.addEventListener('dragstart', e => { dragging = { type: 'task', cat, task }; e.dataTransfer.effectAllowed = 'move'; li.classList.add('dragging'); });
   li.addEventListener('dragend', endDrag);
   return li;
@@ -326,8 +332,8 @@ function renderCalTimeline(v, byDue) {
     days = Array.from({ length: 7 }, (_, i) => addDays(mon, i));
   }
   $('#calTitle').textContent = v === 'day'
-    ? `${fmtFullDay.format(parseISODate(calDate))} · ${isoWeek(parseISODate(calDate))}. hafta`
-    : `${isoWeek(parseISODate(days[0]))}. hafta · ${fmtDayMonth.format(parseISODate(days[0]))} – ${fmtDayMonthYear.format(parseISODate(days[6]))}`;
+    ? fmtFullDay.format(parseISODate(calDate))
+    : `${fmtDayMonth.format(parseISODate(days[0]))} – ${fmtDayMonthYear.format(parseISODate(days[6]))}`;
 
   // Çizelge günün tamamını (00:00–24:00) gösterir; alanda yukarı aşağı kaydırılır
   const lo = 0, hi = 24;
@@ -335,13 +341,13 @@ function renderCalTimeline(v, byDue) {
   const chipText = ({ task }) => `${task.time ? `<b>${task.time}</b> ` : ''}${esc(task.text)}`;
   const chipCls = (task, iso) => `${task.done ? ' done' : ''}${!task.done && iso < today ? ' late' : ''}`;
 
-  // Gün başlıkları: sol sütunda hafta numarası; her günde gün adı, büyük gün numarası ve ay (ayın 1'inde / ilk sütunda vurgulu).
+  // Gün başlıkları: her günde gün adı, büyük gün numarası ve ay (ayın 1'inde / ilk sütunda vurgulu).
   // Gün görünümünde tek geniş başlık: numara, tam gün adı, ay yıl ve Bugün/Yarın/Dün.
   // "Gün boyu" şeridi: solda simge + etiket + açık görev sayısı; hücrede boş yere tıklamak görev ekler (üzerine gelince "Ekle" ipucu).
   const fmtMon = new Intl.DateTimeFormat('tr-TR', { month: 'short' }), fmtMonLong = new Intl.DateTimeFormat('tr-TR', { month: 'long' });
   const untimed = iso => (byDue.get(iso) || []).filter(x => !x.task.time).sort((a, b) => a.task.done - b.task.done);
   const openAd = days.reduce((n, iso) => n + untimed(iso).filter(x => !x.task.done).length, 0);
-  let head = `<div class="cal-tl-gutter cal-tl-wk" title="${isoWeek(parseISODate(days[0]))}. hafta"><b>${isoWeek(parseISODate(days[0]))}</b><span>hafta</span></div>`;
+  let head = '<div class="cal-tl-gutter"></div>';
   let allday = `<div class="cal-tl-gutter cal-tl-lbl">${ico('sun')}<span>Gün boyu</span>${openAd ? `<em title="${openAd} açık görev">${openAd}</em>` : ''}</div>`, cols = '';
   days.forEach((iso, di) => {
     const d = parseISODate(iso), items = byDue.get(iso) || [];

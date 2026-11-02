@@ -258,12 +258,16 @@ $('#backupNow').onclick = async () => {
 };
 $('#backupOpen').onclick = () => api.backup.open();
 // İsim boşsa ayarlar ilk açılışta isim alanına odaklansın
+// Ayarlar diğer sayfalar gibi tam sayfa açılır (üst çubuk açık kalır); ⚙ yeniden basılınca, başka sayfaya geçilince ya da Esc ile kapanır
 $('#openSettings').onclick = () => {
+  if ($('#settingsDlg').open) return $('#settingsDlg').close();
   fillSettingsDialog();
   showSettingsPage(settings.userName ? store.get('settingsPage', 'general') : 'general');
-  $('#settingsDlg').showModal();
+  $('#settingsDlg').show();
+  $('#openSettings').classList.add('on');
   if (!settings.userName) $('#nameInput').focus();
 };
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('#settingsDlg').open && !e.defaultPrevented && !document.querySelector('#datePop:not([hidden]), #timePop:not([hidden])')) $('#settingsDlg').close(); });
 
 const saveName = debounce(async v => { settings = await api.settings.set({ userName: v.trim() }); }, 400);
 $('#nameInput').addEventListener('input', e => {
@@ -309,6 +313,7 @@ $('#cityInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.pr
 
 // Pencere Esc ile ya da dışarıdan kapanırsa, odaktan çıkmadığı için kaydedilmemiş bir anahtar/model kalmasın
 $('#settingsDlg').addEventListener('close', () => {
+  $('#openSettings').classList.remove('on');
   const key = $('#geminiKeyInput').value.trim() || null, model = $('#geminiModelInput').value.trim() || null;
   if (key !== (settings.geminiApiKey || null) || model !== (settings.geminiModel || null)) {
     api.settings.set({ geminiApiKey: key, geminiModel: model }).then(s => { settings = s; });

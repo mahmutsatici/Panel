@@ -1,0 +1,14 @@
+Panel 2.5.0 — Geri bildirim düzeltmeleri
+========================================
+
+• Ayarlar artık diğer sayfalar gibi tam sayfa açılır (üst çubuk açık kalır). ⚙ düğmesine tekrar basınca, başka sayfaya geçince ya da Esc ile kapanır.
+• Takvim gün penceresi: tarih tek satırda ("3 Kasım 2026"), altında gün adı; Bugün/Yarın etiketi ve hafta bilgisi kaldırıldı.
+  Görev satırındaki kategori etiketine tıklayınca görevin kategorisi değişir; satırda ⚑ ile öncelik belirlenir.
+  Yazdığın görev, kategori ya da saat değiştirince silinmez; görev eklenince pencere kapanır.
+• Hafta bilgisi yalnızca saat panelinde: takvim başlıklarından ve gün/hafta görünümlerinden kaldırıldı.
+• Görev satırında öncelik çizgisi kaldırıldı (renkli halka yeterli); öncelik menüsünde seçili olan yalnızca onay işaretiyle gösterilir.
+• Üzerine gelince çıkan satır düğmeleri artık tarih/saat düğmesini örtmez (geniş satırda yerleri ayrılmıştır).
+• Kategori başlığındaki görev sayısına göre renk değiştiren nokta kaldırıldı.
+• Alt görev sayısına (2/2) tıklayınca alt görevler açılıp kapanır (akordiyon).
+• Takvim "Gün boyu" etiketinin yanlarına boşluk eklendi.
+• Liste/pano görünümlerinde de kategori etiketine tıklayınca kategori değişir.

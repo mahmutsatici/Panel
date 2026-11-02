@@ -120,3 +120,6 @@
 
 /* Şerit ile saat çizelgesi arası */
 .cal-tl-body { padding-top: 10px; }
+
+/* Gün boyu etiketi: yanlarda boşluk */
+.cal-tl-lbl { padding-left: 10px; padding-right: 10px; }

@@ -1,7 +1,7 @@
 {
   "name": "masaustu-panel",
   "productName": "Panel",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "Saat, hava durumu, yapılacaklar, Markdown notlar ve sesli asistan için kişisel masaüstü paneli",
   "main": "main.js",
   "private": true,

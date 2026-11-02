@@ -1230,3 +1230,43 @@ body.solo .clock[data-mode="seconds"] .lcd { align-self: center; }
 /* Takvim: sürüklerken gölge blok */
 .cal-ghost { position: absolute; left: 2px; right: 2px; z-index: 3; pointer-events: none; box-sizing: border-box; padding: 1px 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border-radius: 6px; border: 1.5px dashed var(--accent); background: color-mix(in srgb, var(--accent) 22%, var(--card)); line-height: 1.5; font-size: var(--fs-meta); }
 .cal-ghost b { color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; margin-right: 4px; }
+
+/* ---- Sürüm 2.5 düzeltmeleri ---- */
+/* Öncelik çizgisi yok: halka yeterli */
+.cat li[data-p]::before, .cal-tasks li[data-p]::before { content: none; }
+/* Satır araçları: geniş satırda yer ayrılır (tarih/saat düğmesi örtülmez), dar kartta metnin üstüne biner */
+.cat li .row-tools { display: inline-flex; position: static; visibility: hidden; box-shadow: none; background: none; padding: 0; margin-left: auto; flex: none; }
+.cat li:hover .row-tools, .cat li:focus-within .row-tools { visibility: visible; display: inline-flex; }
+@container cat (max-width: 440px) {
+  .cat li .row-tools { display: none; position: absolute; visibility: visible; margin: 0; padding: 1px 3px; background: var(--card-3); box-shadow: 0 2px 10px rgba(0,0,0,.25); }
+  .cat li:hover .row-tools, .cat li:focus-within .row-tools { display: inline-flex; }
+}
+/* Öncelik penceresi: seçili satır yalnızca onay işaretiyle belirtilir */
+.prio-pop button.on { color: var(--text); font-weight: 500; }
+.prio-pop .pn { flex: 1; }
+.prio-pop .ico { width: 14px; height: 14px; color: var(--muted); }
+/* Alt görev sayısı: tıklanınca açılır/kapanır */
+.cat li button.sub-cnt { border: 0; display: inline-flex; align-items: center; gap: 2px; cursor: pointer; font: inherit; font-size: var(--fs-meta); }
+.cat li button.sub-cnt:hover { color: var(--text); background: var(--card-3); }
+.cat li button.sub-cnt .ico { width: 11px; height: 11px; }
+.cat li .fold { display: none; }
+/* Kategori etiketi (satırda ve gün penceresinde) tıklanır */
+button.cat-tag { border: 0; background: none; color: var(--muted); font: inherit; font-size: var(--fs-meta); display: inline-flex; align-items: center; gap: 4px; border-radius: 99px; padding: 0 6px; }
+button.cat-tag:hover { background: var(--card-3); color: var(--text); }
+/* Gün penceresi başlığı: tarih tek satırda, altında gün adı */
+.cd-date { flex-direction: column; align-items: flex-start; gap: 0; line-height: 1.25; }
+.cd-full { font-size: var(--fs-title); font-weight: 700; }
+.cd-wd { font-size: var(--fs-meta); color: var(--muted); text-transform: capitalize; }
+.cd-prio { border: 0; background: none; color: var(--muted); opacity: 0; padding: 0 3px; }
+.cd-prio .ico { width: 14px; height: 14px; }
+.cal-tasks li:hover .cd-prio { opacity: 1; }
+.cd-prio.set { opacity: .9; color: var(--pc); }
+.cal-tasks li[data-p="3"] .cd-prio.set { color: var(--load-3); } .cal-tasks li[data-p="2"] .cd-prio.set { color: var(--load-2); } .cal-tasks li[data-p="1"] .cd-prio.set { color: var(--accent); }
+/* Ayarlar: tam sayfa */
+#settingsDlg { position: fixed; inset: 44px 0 0 0; z-index: 20; width: auto; height: auto; max-width: none; max-height: none; margin: 0; border: 0; border-radius: 0; background: var(--bg); overflow-y: auto; }
+#settingsDlg:not([open]) { display: none; }
+#settingsDlg .set-dlg { max-width: 1040px; margin: 0 auto; padding: 8px 28px 32px; min-height: 100%; }
+#settingsDlg .set-wrap { grid-template-columns: 200px 1fr; gap: 28px; }
+#settingsDlg .set-pages { height: auto; overflow: visible; max-width: 720px; }
+#settingsDlg .row.end { display: none; }
+#openSettings.on { background: var(--accent-soft); color: var(--accent); }

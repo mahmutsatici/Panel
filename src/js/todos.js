@@ -220,6 +220,17 @@ function takeBlock(d, dest) {
   return block;
 }
 
+// Görevi (alt görevleriyle) başka kategoriye taşır; ortak kategori söz konusuysa hedefe kopyası oluşur, kaynaktaki silinir (ortakta bulutta pasifleşir)
+function moveToCategory(cat, task, dest) {
+  if (cat === dest) return;
+  const i = cat.tasks.indexOf(task), block = cat.tasks.slice(i, blockEnd(cat.tasks, i));
+  cat.tasks.splice(i, block.length);
+  const moved = cat.shared || dest.shared ? block.map(copyTask) : block;
+  setBlockLevel(moved, 0);
+  reinsert(dest, moved, null);
+  collapsed.delete(dest.name);
+  return saveTodos();
+}
 function addTask(cat, text, due, rec, time, extra = {}) {
   const more = { ...(extra.priority ? { priority: extra.priority } : {}), ...(extra.remind?.length ? { remind: extra.remind } : {}) };
   insertTask(cat, { done: false, text, due: due || undefined, rec: rec || undefined, ...(time && due ? { time } : {}), ...more, created: stampNow() });
@@ -325,20 +336,21 @@ function buildTaskRow(cat, task, { drag = true, showCat = false, flat = false, c
     + `<span class="txt" title="${esc(taskTitle(task))}">${crumb ? `<span class="crumb" title="Üst görev">↳ ${esc(crumb)}</span> ` : ''}${renderInline(task.text)}</span>`
     // Sağdaki bilgiler (alt görev sayısı, atanan, kategori, tarih) "meta" içinde: geniş satırda metnin yanında, dar kartta metnin altında durur.
     // Üzerine gelince görünen işlemler "row-tools" içinde metnin üzerine biner, yer kaplamaz.
-    + `<span class="meta">${(subs.length ? `<span class="sub-cnt" title="Tamamlanan alt görev">${subs.filter(t => t.done).length}/${subs.length}</span>` : '')
+    + `<span class="meta">${(subs.length ? `<button type="button" class="sub-cnt" title="Alt görevleri göster/gizle">${ico(folded.has(task) ? 'chev-r' : 'chev-d')}${subs.filter(t => t.done).length}/${subs.length}</button>` : '')
       + (cat.shared ? assigneeButtonHtml(cat, task) : '')
-      + (showCat ? `<span class="cat-tag" style="--c:${catColor(cat)}">${cat.icon ? `<span class="cat-ico">${cat.icon}</span>` : '<span class="dot"></span>'}${esc(cat.name)}</span>` : '')
+      + (showCat ? `<button type="button" class="cat-tag" style="--c:${catColor(cat)}" title="Kategoriyi değiştir">${cat.icon ? `<span class="cat-ico">${cat.icon}</span>` : '<span class="dot"></span>'}${esc(cat.name)}</button>` : '')
       + (dueHtml.includes('class="due none"') ? '' : dueHtml)}</span>`
     + `<span class="row-tools">${dueHtml.includes('class="due none"') ? dueHtml : ''}`
     + `<button class="row-add prio" title="Öncelik">${ico('flag')}</button>`
     + (cat.shared || flat ? '' : '<button class="row-add" title="Altına görev ekle">＋</button>')   // ortak kategoride sıra oluşturma tarihine göre; yalnızca alt görev eklenir
     + (flat || lvl(task) >= MAX_LEVEL ? '' : '<button class="row-add sub-add" title="Alt görev ekle">⤷</button>')
     + '<button class="del" title="Sil">✕</button></span>';
-  const fold = li.querySelector('.fold');
-  if (fold) fold.onclick = () => { folded.has(task) ? folded.delete(task) : folded.add(task); renderTodos(); };
+  for (const b of li.querySelectorAll('.fold, .sub-cnt')) b.onclick = () => { folded.has(task) ? folded.delete(task) : folded.add(task); renderTodos(); };
   li.querySelector('input').onchange = e => setDone(cat, task, e.target.checked);
   const asg = li.querySelector('.asg');
   if (asg) asg.onclick = e => pickAssignee(e.currentTarget, cat, task);
+  const catTag = li.querySelector('button.cat-tag');
+  if (catTag) catTag.onclick = () => pickCategory(catTag, cat.name, name => { const dest = activeCats().find(c => c.name === name); if (dest) moveToCategory(cat, task, dest); });
   const prioBtn = li.querySelector('.prio');
   if (prioBtn) prioBtn.onclick = () => pickPriority(prioBtn, task.priority || 0, n => { task.priority = n || undefined; saveTodos(); });
   const rowAdd = li.querySelector('.row-add:not(.sub-add):not(.prio)'), subAdd = li.querySelector('.sub-add');
@@ -425,7 +437,6 @@ function renderTodos() {
     sec.innerHTML = `
       <div class="cat-head" draggable="true" title="Sürükleyerek sırala">
         <span class="chev">▼</span>
-        <span class="dot" title="${loadTitle(cat)}"></span>
         ${cat.icon ? `<button class="cat-ico" title="Simgeyi değiştir">${cat.icon}</button>` : ''}<span class="name">${esc(cat.name)}</span>${cat.shared ? `<button class="shared-mark" title="${esc(sharedTitle(cat))}">👥 ${cat.uyeler.length}</button>` : ''}
         <span class="cnt" title="Yapılmamış / toplam">${openCount}${cat.tasks.length ? ' / ' + cat.tasks.length : ''}</span>
         <span class="tools">
@@ -567,7 +578,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeIconPop
 const prioPop = $('#prioPop');
 function closePrioPop() { prioPop.hidden = true; }
 function pickPriority(anchor, current, onPick) {
-  prioPop.innerHTML = [3, 2, 1, 0].map(n => `<button type="button" data-p="${n}" class="${n === current ? 'on' : ''}"><span class="pdot" data-p="${n}"></span>${PRIO_NAMES[n]}</button>`).join('');
+  prioPop.innerHTML = [3, 2, 1, 0].map(n => `<button type="button" data-p="${n}" class="${n === current ? 'on' : ''}"><span class="pdot" data-p="${n}"></span><span class="pn">${PRIO_NAMES[n]}</span>${n === current ? ico('check') : ''}</button>`).join('');
   prioPop.querySelectorAll('button').forEach(b => b.onclick = () => { closePrioPop(); onPick(+b.dataset.p); });
   prioPop.hidden = false;
   const r = anchor.getBoundingClientRect(), w = prioPop.offsetWidth, h = prioPop.offsetHeight;
