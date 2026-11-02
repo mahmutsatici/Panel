@@ -145,15 +145,26 @@ function renderWhenIdle() {
 
 // --- Hata bildirimi (ör. kural reddi, çevrimdışı yazma): başlıktaki ⚠ üstünde ipucu ---
 let syncErrCode = null;
+const syncLog = [];   // son uyarılar: { at, text }
 function syncError(e) {
   console.error(e);
   const el = $('#syncNote');
   syncErrCode = e?.code;
+  syncLog.unshift({ at: Date.now(), text: cloudErrorText(e) });
+  syncLog.length = Math.min(syncLog.length, 10);
   el.hidden = false;
-  el.title = `Bulutla eşitlenemedi: ${cloudErrorText(e)}`;
+  el.title = `Bulutla eşitlenemedi: ${cloudErrorText(e)} (ayrıntı için tıkla)`;
 }
 // Bağlantı kopması geçicidir: sunucudan haber gelince ⚠ kalkar (kural reddi gibi kalıcı hatalar kalır)
-const clearNetError = () => { if (syncErrCode === 'unavailable') { $('#syncNote').hidden = true; syncErrCode = null; } };
+const clearNetError = () => { if (syncErrCode === 'unavailable') clearSyncNote(); };
+function clearSyncNote() { $('#syncNote').hidden = true; syncErrCode = null; syncLog.length = 0; }
+// Bir yazma sunucuda kabul edilirse önceki yetki/kural uyarısı da geçmiştir (ör. kurallar yayınlandı)
+const syncOk = () => { if (syncErrCode === 'permission-denied') clearSyncNote(); };
+$('#syncNote').onclick = () => {
+  $('#syncList').innerHTML = syncLog.map(x => `<li><span class="tl-main"><span class="tl-text">${esc(x.text)}</span><span class="muted">${esc(fmtStamp.format(new Date(x.at)))}</span></span></li>`).join('') || '<li class="muted">Kayıtlı uyarı yok.</li>';
+  $('#syncDlg').showModal();
+};
+$('#syncClear').onclick = () => { clearSyncNote(); $('#syncDlg').close(); };
 
 // --- Buluttan gelenler ---
 function applyCategories(docs) {
@@ -235,15 +246,12 @@ function applyTasks(cid, docs) {
   scheduleMirror();
 }
 
-// --- Yerel yedek (todo.md): bulutun otomatik aynası; ne sıklıkla yazılacağı Ayarlar → Bildirim & yedek'te seçilir ---
+// --- Yerel yedek (todo.md): bulutun otomatik aynası; her değişiklikten birkaç saniye sonra yazılır (Otomatik yedek de bu dosyayı kopyalar) ---
 // Bulut tek kaynaktır; bu dosya yalnızca yedek ve (gerekirse) başka araçla okumak içindir, elle düzenlenmez.
-const MIRROR_EVERY = { change: 4000, '5': 5 * 60e3, '30': 30 * 60e3, daily: 24 * 3600e3 };   // ms; "off" ve bilinmeyenler yazmaz
 let mirrorTimer = null, mirrorLast = 0;
 function scheduleMirror() {
-  if (!sync || !sync.catsLoaded || !mirrorOk) return;
-  const every = MIRROR_EVERY[settings.mirrorEvery || 'change'];
-  if (!every || mirrorTimer) return;
-  const wait = Math.max(4000, mirrorLast + every - Date.now());
+  if (!sync || !sync.catsLoaded || !mirrorOk || mirrorTimer) return;
+  const wait = Math.max(4000, mirrorLast + 15000 - Date.now());   // en fazla 15 sn'de bir
   mirrorTimer = setTimeout(async () => {
     mirrorTimer = null;
     if (!sync || cloudCats().some(c => !c.deleted && !c.loaded)) return scheduleMirror();   // görevler gelmeden dosyayı eksik yazma
@@ -270,7 +278,7 @@ function pushShared() {
         cloud.createTask(cat.cid, t.id, {
           ...fieldsOf(t, ust), olusturan: me, atanan: null, eklendi: t.created || null,
           bitiren: t.done ? me : null, bitirmeZamani: t.done ? (t.completed ? cloud.stampTs(t.completed) : cloud.now()) : null, silindi: false, silenKisi: null,
-        }).catch(syncError);
+        }).then(syncOk, syncError);
         if (t.done) { t.completedBy = me; t.doneTs = Date.now(); }
       } else if (cat.base.get(t.id) !== sigOf(t, ustOf(cat, t))) {
         const was = JSON.parse(cat.base.get(t.id) || '{}');
@@ -288,7 +296,7 @@ function pushShared() {
           t.doneTs = t.done ? Date.now() : 0;
         }
         cat.base.set(t.id, sigOf(t, ust));
-        cloud.updateTask(cat.cid, t.id, patch).catch(syncError);
+        cloud.updateTask(cat.cid, t.id, patch).then(syncOk, syncError);
       }
       live.add(t.id);
     }

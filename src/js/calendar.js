@@ -16,6 +16,7 @@ let calAnchorPt = null;   // çizelgede tıklanan nokta {x, y}: gün penceresi b
 let calView = store.get('calView', 'month');   // 'month' | 'week' | 'day'; hafta ve gün yalnızca tam ekranda
 let calDate = todayISO();                      // hafta/gün görünümünün gösterdiği gün
 const activeCalView = () => (document.body.classList.contains('solo') ? calView : 'month');
+const BLANK_IMG = Object.assign(new Image(), { src: 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' });   // sürüklerken yerel görüntü gösterilmez: gölge blok onun yerini alır
 const CAL_HOUR_PX = 44;                        // çizelgede bir saatin yüksekliği
 const timeMins = t => +t.time.slice(0, 2) * 60 + +t.time.slice(3);
 // Gün içi sıra: yapılmamışlar saate göre (saatsizler sonda), yapılmışlar altta
@@ -402,7 +403,7 @@ function renderCalTimeline(v, byDue) {
     el.onclick = () => openCalDay(el.dataset.iso);
     const chk = el.querySelector('.cal-chk');
     if (chk) chk.onclick = e => { e.stopPropagation(); setDone(item.cat, item.task, !item.task.done); };
-    el.addEventListener('dragstart', e => { dragging = { type: 'task', cat: item.cat, task: item.task }; e.dataTransfer.effectAllowed = 'move'; el.classList.add('dragging'); });
+    el.addEventListener('dragstart', e => { dragging = { type: 'task', cat: item.cat, task: item.task }; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setDragImage(BLANK_IMG, 0, 0); el.classList.add('dragging'); });
     el.addEventListener('dragend', endDrag);
   });
   tl.querySelectorAll('.cal-col-head').forEach(b => b.onclick = () => {
@@ -437,6 +438,13 @@ function renderCalTimeline(v, byDue) {
   const ghost = document.createElement('div');
   ghost.className = 'cal-ghost';
   const hideGhost = () => ghost.remove();
+  // Gün boyu şeridinde gölge: sürüklenen görevin kendisi gibi küçük bir çip
+  const showAdGhost = (t, d) => {
+    ghost.className = 'cal-ghost ad';
+    ghost.style.cssText = `--c:${catColor(d.cat)}`;
+    ghost.innerHTML = `<i class="cal-chk">${ico('check')}</i><span class="cal-ad-t">${esc(d.task.text)}</span>`;
+    if (ghost.parentElement !== t) t.append(ghost);
+  };
   const dropTargets = tl.querySelectorAll('.cal-col, .cal-ad');
   dropTargets.forEach(t => {
     t.addEventListener('dragover', e => {
@@ -446,12 +454,13 @@ function renderCalTimeline(v, byDue) {
       t.classList.add('drop-day');
       if (t.classList.contains('cal-col')) {
         const { m, time } = slotTime(e, t);
+        ghost.className = 'cal-ghost';
         ghost.style.top = `${(m - lo * 60) / 60 * H}px`;
         ghost.style.height = `${H / 2 - 2}px`;
         ghost.style.setProperty('--c', catColor(dragging.cat));
         ghost.innerHTML = `<b>${time}</b> ${esc(dragging.task.text)}`;
         if (ghost.parentElement !== t) t.append(ghost);
-      } else hideGhost();
+      } else showAdGhost(t, dragging);
     });
     t.addEventListener('dragleave', e => { if (!t.contains(e.relatedTarget)) { t.classList.remove('drop-day'); hideGhost(); } });
     t.addEventListener('drop', e => {

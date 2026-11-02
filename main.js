@@ -45,14 +45,10 @@ const DEFAULT_SETTINGS = {
   geminiFallbackModels: 'gemini-flash-latest,gemini-2.5-flash-lite,gemini-2.5-flash',
   // SPARK'ın sesi (Gemini TTS). ttsModels virgülle ayrılmış listedir ve sırayla denenir: birinin günlük
   // ücretsiz kotası dolarsa sıradakine geçilir; hepsi doluysa arayüz yerel Windows sesine (Tolga) döner.
-  ttsEnabled: true, ttsVoice: 'Kore',
+  ttsVoice: 'Kore',
   // Konuşma bitince (bu kadar ms sessizlikten sonra) kayıt kendiliğinden gönderilir; 0 = kapalı, düğmeyle bitirilir
   sparkSilenceMs: 1500,
-  // Ortak kategorilerdeki görevler Spark'a (Gemini'ye) gönderilsin mi
-  sparkSeesShared: true,
   ttsModels: 'gemini-2.5-flash-preview-tts',
-  // Bulut kaynağın todo.md aynası ne sıklıkla yazılsın: 'change' | '5' | '30' | 'daily' | 'off' (dakika / günlük)
-  mirrorEvery: 'change',
 };
 
 async function ensureData() {

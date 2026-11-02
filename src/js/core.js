@@ -223,6 +223,9 @@ function openListPop(anchor, items, current, onPick) {
   listPopAnchor = anchor;
   listPop.innerHTML = items.map((o, i) => `<button type="button" data-i="${i}" class="${String(o.value) === String(current) ? 'on' : ''}"><span>${esc(o.label)}</span>${String(o.value) === String(current) ? ico('check') : ''}</button>`).join('');
   listPop.querySelectorAll('button').forEach(b => b.onclick = () => { closeListPop(); onPick(items[+b.dataset.i].value); });
+  // Modal pencere (dialog) üst katmandadır: liste de onun içine alınmazsa altında kalır
+  const host = anchor.closest('dialog[open]') || document.body;
+  if (listPop.parentElement !== host) host.append(listPop);
   listPop.hidden = false;
   const r = anchor.getBoundingClientRect();
   listPop.style.minWidth = `${Math.max(r.width, 140)}px`;

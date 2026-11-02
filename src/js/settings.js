@@ -1,6 +1,6 @@
 // ============ Ayarlar ============
 // Koyu zeminli temalar (editör koyu görünümünü kullanır); diğerleri açık zeminli.
-const DARK_THEMES = new Set(['dark', 'navy']);
+const DARK_THEMES = new Set(['dark', 'navy', 'graphite', 'forest', 'plum']);
 function applyTheme() {
   const t = settings.theme === 'system'
     ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
@@ -35,8 +35,6 @@ function fillSettingsDialog() {
   $('#geminiKeyInput').value = settings.geminiApiKey || '';
   $('#geminiStatus').textContent = settings.geminiApiKey ? '' : 'Henüz anahtar girilmedi; sesli asistan çalışmaz.';
   $('#voiceShortcutLbl').textContent = settings.voiceShortcut.replace('Control', 'Ctrl');
-  $('#ttsEnabled').checked = settings.ttsEnabled !== false;
-  $('#sparkShared').checked = settings.sparkSeesShared !== false;
   $('#ttsVoice').value = settings.ttsVoice || 'Kore';
   $('#sparkSilence').value = String(settings.sparkSilenceMs ?? 1500);
   renderLayoutSettings();
@@ -122,8 +120,6 @@ $('#geminiTest').onclick = async () => {
   }
 };
 $('#sparkSilence').onchange = async e => { settings = await api.settings.set({ sparkSilenceMs: Number(e.target.value) }); };
-$('#sparkShared').onchange = async e => { settings = await api.settings.set({ sparkSeesShared: e.target.checked }); };
-$('#ttsEnabled').onchange = async e => { settings = await api.settings.set({ ttsEnabled: e.target.checked }); };
 $('#ttsVoice').onchange = async e => { settings = await api.settings.set({ ttsVoice: e.target.value }); };
 $('#ttsPreview').onclick = async () => {
   const b = $('#ttsPreview');
@@ -141,10 +137,8 @@ $('#geminiTest').onclick = async () => {
 };
 
 // --- Sabah bildirimi & otomatik yedek ---
-$('#mirrorEvery').onchange = async e => { settings = await api.settings.set({ mirrorEvery: e.target.value }); scheduleMirror(); };
 function renderNotifyBackup() {
   const n = settings.notify || {}, b = settings.backup || {};
-  $('#mirrorEvery').value = settings.mirrorEvery || 'change';
   $('#notifyChk').checked = !!n.enabled;
   $('#notifyTime').value = n.time || '09:00';
   $('#backupChk').checked = !!b.enabled;
@@ -191,6 +185,7 @@ $('#backupNow').onclick = async () => {
 };
 $('#backupOpen').onclick = () => api.backup.open();
 // İsim boşsa ayarlar ilk açılışta isim alanına odaklansın
+$('#settingsClose').onclick = () => $('#settingsDlg').close();
 // Ayarlar diğer sayfalar gibi tam sayfa açılır (üst çubuk açık kalır); ⚙ yeniden basılınca, başka sayfaya geçilince ya da Esc ile kapanır
 $('#openSettings').onclick = () => {
   if ($('#settingsDlg').open) return $('#settingsDlg').close();
@@ -198,6 +193,7 @@ $('#openSettings').onclick = () => {
   showSettingsPage(settings.userName ? store.get('settingsPage', 'general') : 'general');
   $('#settingsDlg').show();
   $('#openSettings').classList.add('on');
+  document.body.classList.add('settings-open');
   if (!settings.userName) $('#nameInput').focus();
 };
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('#settingsDlg').open && !e.defaultPrevented && !document.querySelector('#datePop:not([hidden]), #timePop:not([hidden])')) $('#settingsDlg').close(); });
@@ -247,6 +243,7 @@ $('#cityInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.pr
 // Pencere Esc ile ya da dışarıdan kapanırsa, odaktan çıkmadığı için kaydedilmemiş bir anahtar/model kalmasın
 $('#settingsDlg').addEventListener('close', () => {
   $('#openSettings').classList.remove('on');
+  document.body.classList.remove('settings-open');
   const key = $('#geminiKeyInput').value.trim() || null;
   if (key !== (settings.geminiApiKey || null)) api.settings.set({ geminiApiKey: key }).then(s => { settings = s; });
 });

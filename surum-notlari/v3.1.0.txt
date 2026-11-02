@@ -1,0 +1,13 @@
+Panel 3.1.0 — Düzeltmeler ve sadeleşme
+======================================
+
+• Geçmiş penceresi yenilendi: kategoriler sekme olarak seçilir (önceki açılır liste modal pencerenin altında kalıp açılmıyordu), yüklenenler içinde arama,
+  görevler tamamlanma ayına göre gruplanır, her satırda tamamlanma tarihi. Aynı düzeltme uygulamadaki tüm açılır listeler için geçerli (pencere içinde de açılır).
+• Başlıktaki ⚠ uyarısı artık tıklanınca ayrıntı gösterir (hata metni ve zamanı) ve "Temizle" düğmesi vardır; bir yazma sunucuda kabul edilirse yetki uyarısı kendiliğinden kalkar.
+• Yerel yedek ayarı kaldırıldı: todo.md bulutun aynası olarak her değişiklikten birkaç saniye sonra (en fazla 15 sn'de bir) yazılır; Otomatik yedek bu dosyayı da kopyalar.
+• Spark ayarları sadeleşti: "Gerçekçi ses" ve "Ortak görevleri Spark da görsün" onay kutuları kalktı (her zaman açık). Müzik bilgisi yerine "Spark neler yapabilir?" bölümü var.
+• 6 yeni tema: Grafit, Orman, Erik (koyu) ve Nane, Gül, Gökyüzü (açık).
+• Ayarlar açıkken üst çubukta önceki sayfanın sekmesi seçili görünmez; Ayarlar diğer tam ekran sayfalar gibi kart görünümünde, başlıkta kapat düğmesi var.
+• Takvimde görevi saate/güne sürüklerken yerel sürükleme görüntüsü yerine bırakılacak yer ve saat sürüklenen görevin kendisi gibi gösterilir (gün boyu şeridinde de).
+• Satırın üzerine gelince çıkan düğmeler (öncelik, alt görev, sil...) büyütüldü ve kenarlıklı hale getirildi.
+• Kategori simgesi seçeneği 40'tan 130'a çıktı.

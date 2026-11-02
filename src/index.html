@@ -106,7 +106,7 @@
     <!-- Yapılacaklar -->
     <section class="card todos" data-card="todos">
       <div class="card-head">
-        <h2>Yapılacaklar <span class="badge" id="todoCount"></span><span class="sync-note" id="syncNote" hidden>⚠</span></h2>
+        <h2>Yapılacaklar <span class="badge" id="todoCount"></span><button type="button" class="sync-note" id="syncNote" title="Eşitleme uyarısı" hidden>⚠</button></h2>
         <div class="actions">
           <span class="todo-views" id="todoViews">
             <span class="cal-views"><button type="button" data-m="card">Kart</button><button type="button" data-m="list">Liste</button><button type="button" data-m="board">Pano</button></span>
@@ -203,7 +203,7 @@
   <!-- Ayarlar: solda kategoriler, sağda seçili kategorinin sayfası (js/settings.js) -->
   <dialog id="settingsDlg">
     <form method="dialog" class="settings set-dlg">
-      <h2 class="dlg-title"><img src="icons/logo.svg" alt="" draggable="false"> Ayarlar</h2>
+      <h2 class="dlg-title"><img src="icons/logo.svg" alt="" draggable="false"> Ayarlar<button type="button" class="icon-btn set-close" id="settingsClose" title="Kapat (Esc)">✕</button></h2>
       <div class="set-wrap">
         <nav class="set-nav" id="setNav">
           <button type="button" data-page="general">Genel</button>
@@ -235,9 +235,15 @@
             <label>Renk teması
               <select id="themeSelect">
                 <option value="dark">Koyu</option>
+                <option value="graphite">Grafit (koyu)</option>
+                <option value="forest">Orman (koyu yeşil)</option>
+                <option value="plum">Erik (koyu mor)</option>
                 <option value="navy">Lacivert</option>
                 <option value="light">Açık</option>
                 <option value="cream">Krem</option>
+                <option value="mint">Nane (açık yeşil)</option>
+                <option value="rose">Gül (açık pembe)</option>
+                <option value="sky">Gökyüzü (açık mavi)</option>
                 <option value="system">Sistem (koyu / açık)</option>
               </select>
             </label>
@@ -325,19 +331,21 @@
               </select>
             </label>
 
-            <h3>Ortak görevler</h3>
-            <label class="check"><input type="checkbox" id="sparkShared"> Ortak kategorilerdeki görevleri Spark da görsün (Gemini'ye gönderilir). Kapalıysa yalnızca kişisel görevlerin gönderilir.</label>
-
             <h3>Ses</h3>
-            <label class="check"><input type="checkbox" id="ttsEnabled"> Gerçekçi ses kullan (Gemini). Kapalıysa ya da kota dolarsa Windows sesi kullanılır.</label>
             <label>Ses tonu
               <div class="row">
                 <select id="ttsVoice"></select>
                 <button type="button" id="ttsPreview">▶ Dinle</button>
               </div>
             </label>
-            <h3>Müzik</h3>
-            <p class="muted">"Şu şarkıyı aç", "chill bir şeyler aç" gibi isteklerin YouTube'da varsayılan tarayıcında açılır. Çalmayı tarayıcıdan sen başlatır ve yönetirsin.</p>
+            <h3>Spark neler yapabilir?</h3>
+            <ul class="spark-can">
+              <li><b>Görevler:</b> "yarın 15:00 toplantı ekle", "raporu tamamla", "market görevini sil" gibi görev ekler, tamamlar, geri açar, siler ve günü/saati/tekrarı değiştirir; kategoriyi sen söylersin.</li>
+              <li><b>Sorular:</b> "bugün neler var?", "bu hafta ne geciken var?", "hava nasıl?" gibi görevlerin ve hava durumu hakkında cevap verir.</li>
+              <li><b>Web:</b> "github'ı aç", "yarınki maçı google'da ara" dersen sayfayı varsayılan tarayıcında açar.</li>
+              <li><b>Müzik:</b> "chill bir şeyler aç" dersen YouTube'da aramayı tarayıcında açar; çalmayı sen başlatır ve yönetirsin.</li>
+              <li><b>Konuşma:</b> mikrofon düğmesiyle ya da yazarak; cevabı Gemini sesiyle okur (kota dolarsa Windows sesine döner).</li>
+            </ul>
             <p class="muted">Sesin ve görev listenin metni yalnızca konuştuğun anda Google'ın sunucularına gönderilir; başka hiçbir yere kaydedilmez.</p>
           </section>
 
@@ -352,18 +360,6 @@
               <button type="button" id="notifyTest">Şimdi dene</button>
             </div>
             <p class="muted">Bilgisayar o saatte kapalıysa, açıldığında gönderilir.</p>
-
-            <h3>Yerel yedek (todo.md)</h3>
-            <p class="muted">Görevlerin tek kaynağı buluttur; Panel, görevlerinin bir kopyasını bu bilgisayardaki <b>todo.md</b> dosyasına yazar (bulut erişilemezse elinde yedek olsun).</p>
-            <label>Ne sıklıkla yazılsın
-              <select id="mirrorEvery">
-                <option value="change">Her değişiklikten birkaç saniye sonra</option>
-                <option value="5">En fazla 5 dakikada bir</option>
-                <option value="30">En fazla 30 dakikada bir</option>
-                <option value="daily">Günde bir</option>
-                <option value="off">Hiç yazma</option>
-              </select>
-            </label>
 
             <h3>Otomatik yedek</h3>
             <label class="check"><input type="checkbox" id="backupChk"> Veri klasörünü her gün yedekle (son 7 gün saklanır)</label>
@@ -412,13 +408,22 @@
 
   <!-- Silinenler -->
   <dialog id="historyDlg">
-    <form method="dialog" class="settings">
+    <form method="dialog" class="settings hist">
       <h2 class="dlg-title">Geçmiş · tamamlanan görevler</h2>
-      <label>Kategori <select id="histCat"></select></label>
-      <ul class="trash-list" id="histList"></ul>
+      <div class="hist-tabs" id="histTabs"></div>
+      <input id="histSearch" class="hist-search" placeholder="Yüklenenler içinde ara…" autocomplete="off">
+      <div class="hist-body" id="histList"></div>
       <p class="muted" id="histMsg"></p>
-      <div class="row"><button type="button" id="histMore" hidden>Daha eski görevleri getir</button></div>
-      <div class="row end"><button value="close" class="primary">Kapat</button></div>
+      <div class="row end"><button type="button" id="histMore" hidden>Daha eski görevleri getir</button><button value="close" class="primary">Kapat</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="syncDlg">
+    <form method="dialog" class="settings">
+      <h2 class="dlg-title">Bulut eşitleme uyarıları</h2>
+      <ul class="trash-list" id="syncList"></ul>
+      <p class="muted">Kural reddi (yetki yok), çevrimdışı yazma gibi sorunlar burada listelenir. Sorun çözüldüyse "Temizle" ile uyarıyı kaldırabilirsin.</p>
+      <div class="row end"><button type="button" id="syncClear">Temizle</button><button value="close" class="primary">Kapat</button></div>
     </form>
   </dialog>
 

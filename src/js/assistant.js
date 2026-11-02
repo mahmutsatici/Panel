@@ -191,7 +191,7 @@ async function speak(text, voice, onStart) {
   if (!text) return null;
   stopSpeaking();
   const token = speakToken;
-  if (settings.ttsEnabled !== false && settings.geminiApiKey) {
+  if (settings.geminiApiKey) {
     try {
       const { pcm, sampleRate } = await api.assistant.speak(text, voice);
       if (token !== speakToken) return null;   // hazırlanırken kapatıldı / yeni kayda geçildi
@@ -233,7 +233,6 @@ function tasksContext(typedText) {
   ctxTasks = new Map();
   let n = 0;
   for (const cat of activeCats()) {
-    if (cat.shared && settings.sparkSeesShared === false) continue;   // ortak kategoriler Spark'a kapatılabilir
     lines.push(`## ${cat.name}`);
     if (cat.shared) lines.push(`(ortak kategori; üyeler: ${cat.uyeler.map(e => memberName(cat, e)).join(', ')})`);
     for (const t of cat.tasks) {
@@ -621,7 +620,7 @@ async function sayAndShow(text, endState) {
   const used = await speak(text, undefined, () => { voicePrep = false; setState('speaking'); });
   voicePrep = false;
   if (asState !== 'speaking') return null;   // bu arada kapatıldı / sözü kesildi
-  setState(endState, used === 'yerel' && settings.ttsEnabled !== false && settings.geminiApiKey
+  setState(endState, used === 'yerel' && settings.geminiApiKey
     ? `${STATE_LABELS[endState]} · yedek ses` : undefined);
   return used;
 }

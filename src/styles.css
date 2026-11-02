@@ -1322,3 +1322,57 @@ button.cat-tag:hover { background: var(--card-3); color: var(--text); }
 dialog:has(#migText) { width: 560px; max-width: 94vw; }
 #migBar { width: 100%; accent-color: var(--accent); }
 .gate-form[hidden], .gate-actions[hidden] { display: none; }
+
+/* ---- Yeni temalar ---- */
+[data-theme="graphite"] { --bg: #121214; --card: #1b1c20; --card-2: #24262b; --card-3: #2c2e34; --line: #33353c; --text: #ececee; --muted: #94969f; --accent: #7aa2f7; --accent-soft: rgba(122, 162, 247, .15); --danger: #ff6b6b; --warm: #ffb547; --cool: #6cb6ff; --rain: #5fb3ff; --code: #15161a; }
+[data-theme="forest"] { --bg: #0c1512; --card: #12201a; --card-2: #192b23; --card-3: #20362c; --line: #26392f; --text: #e6f0ea; --muted: #8aa397; --accent: #4cc38a; --accent-soft: rgba(76, 195, 138, .15); --danger: #ff6b6b; --warm: #ffb547; --cool: #6cc0c9; --rain: #5fb3c9; --code: #0e1a14; }
+[data-theme="plum"] { --bg: #130e1a; --card: #1c1526; --card-2: #261c33; --card-3: #2e2340; --line: #382a4d; --text: #efe9f7; --muted: #a394bb; --accent: #b88cff; --accent-soft: rgba(184, 140, 255, .16); --danger: #ff6b8b; --warm: #ffb547; --cool: #8fb8ff; --rain: #7fb0ff; --code: #150f1d; }
+[data-theme="mint"] { --bg: #e4f1ea; --card: #f6fbf8; --card-2: #ebf6f0; --card-3: #dcede3; --line: #cde2d6; --text: #1c2b24; --muted: #5d7a6c; --accent: #1f9d6a; --accent-soft: rgba(31, 157, 106, .11); --danger: #d64545; --warm: #e8590c; --cool: #1c7ed6; --rain: #1c7ed6; --code: #e7f3ec; }
+[data-theme="rose"] { --bg: #f5e6eb; --card: #fff7f9; --card-2: #fbeef2; --card-3: #f3dfe5; --line: #e9ced7; --text: #33202a; --muted: #8d6b78; --accent: #d6457a; --accent-soft: rgba(214, 69, 122, .1); --danger: #c0392b; --warm: #e8590c; --cool: #1c7ed6; --rain: #1c7ed6; --code: #f7e8ed; }
+[data-theme="sky"] { --bg: #e3edf8; --card: #f5f9ff; --card-2: #eaf2fb; --card-3: #dce8f6; --line: #cbdbee; --text: #17243a; --muted: #5b7390; --accent: #2f7de1; --accent-soft: rgba(47, 125, 225, .1); --danger: #e03131; --warm: #e8590c; --cool: #1c7ed6; --rain: #1c7ed6; --code: #e7eff9; }
+[data-tone="light"] .dp-remind-add input, [data-tone="light"] .dp-remind-add select, [data-tone="light"] .dp-time input { color-scheme: light; }
+
+/* ---- Satır düğmeleri daha belirgin ---- */
+.cat li .row-tools .row-add, .cat li .row-tools .del { min-width: 28px; height: 28px; padding: 0 6px; display: inline-grid; place-items: center; border: 1px solid var(--line); background: var(--card-3); color: var(--text); opacity: 1; border-radius: 8px; font-size: var(--fs-text); }
+.cat li .row-tools .row-add:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.cat li .row-tools .del:hover { background: color-mix(in srgb, var(--danger) 16%, var(--card-3)); border-color: var(--danger); color: var(--danger); }
+.cat li .row-tools .ico { width: 15px; height: 15px; }
+.cat li .row-tools { gap: 4px; }
+
+/* ---- Ayarlar: diğer tam ekran sayfalar gibi kart ---- */
+#settingsDlg { inset: 44px 16px 16px 16px; border: 1px solid var(--line); border-radius: 18px; background: var(--card); }
+#settingsDlg .set-dlg { max-width: none; padding: 20px 28px 32px; }
+#settingsDlg .dlg-title { display: flex; align-items: center; gap: 10px; font-size: var(--fs-title); font-weight: 600; margin-bottom: 8px; }
+#settingsDlg .set-close { margin-left: auto; }
+#settingsDlg .set-pages { max-width: 860px; }
+.settings-open .tb-nav button.on { background: transparent; color: var(--muted); }
+.settings-open .tb-nav button.on:hover { background: var(--card); color: var(--text); }
+.spark-can { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-sub); color: var(--muted); }
+.spark-can b { color: var(--text); }
+
+/* ---- Eşitleme uyarısı düğmesi ---- */
+button.sync-note { border: 0; background: none; padding: 0 2px; cursor: pointer; }
+
+/* ---- Geçmiş penceresi ---- */
+dialog:has(.hist) { width: 640px; max-width: 94vw; }
+.hist-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.settings .hist-tabs button { display: inline-flex; align-items: center; gap: 6px; border-radius: 99px; padding: 4px 12px; font-size: var(--fs-sub); }
+.settings .hist-tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.hist-search { width: 100%; }
+.hist-body { max-height: min(52vh, 480px); overflow-y: auto; display: flex; flex-direction: column; gap: 1px; padding-right: 4px; }
+.settings .hist-month { text-transform: capitalize; letter-spacing: 0; color: var(--muted); border-top: 0; padding-top: 0; margin: 14px 0 4px; font-size: var(--fs-sub); font-weight: 650; }
+.hist-body .hist-month:first-child { margin-top: 2px; }
+.hist-row { display: flex; align-items: flex-start; gap: 10px; padding: 7px 8px; border-radius: 8px; }
+.hist-row:hover { background: var(--card-2); }
+.hist-chk { width: 18px; height: 18px; border-radius: 50%; background: var(--accent); color: #fff; display: grid; place-items: center; flex: none; margin-top: 2px; }
+.hist-chk .ico { width: 12px; height: 12px; stroke-width: 2.6; }
+.hist-txt { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.hist-meta { flex: none; color: var(--muted); font-size: var(--fs-meta); white-space: nowrap; margin-top: 2px; }
+.hist-empty { padding: 18px 4px; text-align: center; }
+
+/* ---- Takvim: gün boyu şeridinde sürükleme gölgesi ---- */
+.cal-ghost.ad { position: static; display: flex; align-items: center; gap: 6px; margin: 2px; height: auto; padding: 3px 8px 3px 6px; font-size: var(--fs-sub); border-left: 3px solid var(--c); }
+.cal-ghost.ad .cal-chk { border-color: var(--c); }
+.icon-pop { width: 300px; max-height: 280px; overflow-y: auto; }
+.ip-grid { grid-template-columns: repeat(9, 1fr); }
+.cal-ghost:not(.ad) { border: 1px solid var(--accent); box-shadow: 0 4px 14px rgba(0,0,0,.35); }
