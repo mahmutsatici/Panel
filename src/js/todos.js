@@ -184,48 +184,42 @@ function parseTodos(text) {
   return { head: head || '# Yapılacaklar', cats };
 }
 
+// todo.md yedeği (bulutun aynası): bulut kategorileri ve yüklü görevleri bu biçimde yazılır (bkz. shared.js → scheduleMirror)
 function serializeTodos() {
-  const out = [todo.head, ''];
-  for (const c of todo.cats) {
-    if (c.shared) continue;   // ortak kategoriler buluttadır, todo.md'ye yazılmaz
-    out.push(`## ${c.name}${c.icon ? ` <!-- simge:${c.icon} -->` : ''}${c.deleted ? ' ' + c.mark : ''}`);
+  const out = [todo.head, `<!-- ${MIRROR_TAG}: ${sync?.email || ''} — bu dosya bulutun otomatik yedeğidir; elle düzenlemeyin -->`, ''];
+  for (const c of activeCats()) {
+    out.push(`## ${c.name}${c.icon ? ` <!-- simge:${c.icon} -->` : ''}`);
     for (const t of c.tasks) out.push('  '.repeat(lvl(t)) + taskLine(t));
-    out.push(...c.hidden, '');
+    out.push('');
   }
   return out.join('\n');
 }
 
-async function loadTodos() {
-  const parsed = parseTodos(await api.todos.read());
-  const shared = sharedCats();   // ortak kategoriler dosyadan gelmez; okuma sürerken gelenler de korunsun
-  todo = parsed;
-  shared.forEach(placeShared);
-  renderTodos();
-}
+// Yerel todo.md (eski kaynak): yalnızca buluta ilk taşıma için okunur
+async function readLocalTodos() { return parseTodos(await api.todos.read()); }
 async function saveTodos() {
   pushShared();
   saveCatOrder();
   renderTodos();
-  await api.todos.write(serializeTodos());
+  scheduleMirror();
 }
 
 // Yapılmamış → en üste; yapılmış → yapılmışların en üstüne (üst seviyede).
 function insertTask(cat, task) { reinsert(cat, [task], null); }
-// Sürüklenen görev (alt görevleriyle birlikte, "blok"): aynı kategoride ya da iki yerel kategori arasında taşınır;
-// ortak kategoriyle yerel arasında kopyalanır
+// Sürüklenen görev (alt görevleriyle birlikte, "blok"): aynı kategoride sıralanır; başka kategoriye taşınırken yeni belge olur
+// (kopyası hedefe eklenir, kaynaktaki silinir — buluttaki görev kategorisini değiştiremez)
 function takeBlock(d, dest) {
   const i = d.cat.tasks.indexOf(d.task), block = d.cat.tasks.slice(i, blockEnd(d.cat.tasks, i));
-  if (d.cat !== dest && (d.cat.shared || dest.shared)) return block.map(copyTask);   // alt görevleriyle birlikte kopyalanır
   d.cat.tasks.splice(i, block.length);
-  return block;
+  return d.cat !== dest ? block.map(copyTask) : block;
 }
 
-// Görevi (alt görevleriyle) başka kategoriye taşır; ortak kategori söz konusuysa hedefe kopyası oluşur, kaynaktaki silinir (ortakta bulutta pasifleşir)
+// Görevi (alt görevleriyle) başka kategoriye taşır: hedefe kopyası oluşur, kaynaktaki bulutta pasifleşir
 function moveToCategory(cat, task, dest) {
   if (cat === dest) return;
   const i = cat.tasks.indexOf(task), block = cat.tasks.slice(i, blockEnd(cat.tasks, i));
   cat.tasks.splice(i, block.length);
-  const moved = cat.shared || dest.shared ? block.map(copyTask) : block;
+  const moved = block.map(copyTask);
   setBlockLevel(moved, 0);
   reinsert(dest, moved, null);
   collapsed.delete(dest.name);
@@ -273,34 +267,11 @@ function setDueRec(task, { due, rec, time, remind }) {
 }
 const allTasks = () => activeCats().flatMap(cat => cat.tasks.map(task => ({ cat, task })));
 
-// --- Pasif yapma / geri getirme ---
+// --- Pasif yapma ---
+// Görev listeden çıkarılır; pushShared() bulutta "silindi" işaretler (Silinenler penceresinden geri getirilir)
 function deleteTask(cat, task) {
   const i = cat.tasks.indexOf(task);
-  const gone = cat.tasks.splice(i, blockEnd(cat.tasks, i) - i);   // alt görevler de birlikte pasif olur
-  if (!cat.shared) cat.hidden.push(...gone.map(t => `${taskLine(t)} ${deletedMark()}`));   // ortak görev bulutta yumuşak silinir (pushShared)
-}
-function deleteCategory(cat) {
-  cat.deleted = true;
-  cat.mark = deletedMark();
-  if (!activeCats().length) todo.cats.push(newCat(GENERAL));
-}
-function restoreHiddenTask(cat, index) {
-  const [line] = cat.hidden.splice(index, 1);
-  const task = parseTaskLine(line.replace(DEL_RE, ''));
-  if (task) insertTask(cat, task);
-}
-function restoreCategory(cat) {
-  const same = activeCats().find(c => !c.shared && c.name === cat.name);
-  if (same) {
-    // Aynı adda aktif bir kategori varsa görevler ona katılır
-    same.tasks = sortTree([...same.tasks, ...cat.tasks]);
-    same.hidden.push(...cat.hidden);
-    todo.cats.splice(todo.cats.indexOf(cat), 1);
-  } else {
-    cat.deleted = false;
-    delete cat.mark;
-    cat.tasks = sortTree(cat.tasks);
-  }
+  cat.tasks.splice(i, blockEnd(cat.tasks, i) - i);   // alt görevler de birlikte pasif olur
 }
 
 // Görev bilgisi ipucu: eklenme / tamamlanma zamanı
@@ -338,7 +309,7 @@ function buildTaskRow(cat, task, { drag = true, showCat = false, flat = false, c
     // Üzerine gelince görünen işlemler "row-tools" içinde metnin üzerine biner, yer kaplamaz.
     + `<span class="row-tools">${dueHtml.includes('class="due none"') ? dueHtml : ''}`
     + `<button class="row-add prio" title="Öncelik">${ico('flag')}</button>`
-    + (cat.shared || flat ? '' : '<button class="row-add" title="Altına görev ekle">＋</button>')   // ortak kategoride sıra oluşturma tarihine göre; yalnızca alt görev eklenir
+    + (flat ? '' : '<button class="row-add" title="Altına görev ekle">＋</button>')
     + (flat || lvl(task) >= MAX_LEVEL ? '' : '<button class="row-add sub-add" title="Alt görev ekle">⤷</button>')
     + '<button class="del" title="Sil">✕</button></span>'
     + `<span class="meta">${(subs.length ? `<button type="button" class="sub-cnt" title="Alt görevleri göster/gizle">${ico(folded.has(task) ? 'chev-r' : 'chev-d')}${subs.filter(t => t.done).length}/${subs.length}</button>` : '')
@@ -388,7 +359,6 @@ function buildTaskRow(cat, task, { drag = true, showCat = false, flat = false, c
     e.stopPropagation();
     const d = dragging;
     if (d.task === task) return endDrag();
-    if (d.cat === cat && cat.shared) return endDrag();   // ortak kategoride sıra oluşturma tarihine göre
     if (d.cat === cat && blockOf(cat, d.task).includes(task)) return endDrag();   // görev kendi alt görevinin yanına bırakılamaz
     const before = upperHalf(e, li);
     const block = takeBlock(d, cat);
@@ -437,13 +407,11 @@ function renderTodos() {
     sec.innerHTML = `
       <div class="cat-head" draggable="true" title="Sürükleyerek sırala">
         <span class="chev">▼</span>
-        ${cat.icon ? `<button class="cat-ico" title="Simgeyi değiştir">${cat.icon}</button>` : ''}<span class="name">${esc(cat.name)}</span>${cat.shared ? `<button class="shared-mark" title="${esc(sharedTitle(cat))}">👥 ${cat.uyeler.length}</button>` : ''}
+        ${cat.icon ? `<button class="cat-ico" title="${isOwner(cat) ? 'Simgeyi değiştir' : ''}">${cat.icon}</button>` : ''}<span class="name">${esc(cat.name)}</span>${cat.shared ? `<button class="shared-mark" title="${esc(sharedTitle(cat))}">👥 ${cat.uyeler.length}</button>` : ''}
         <span class="cnt" title="Yapılmamış / toplam">${openCount}${cat.tasks.length ? ' / ' + cat.tasks.length : ''}</span>
         <span class="tools">
           <button class="add" title="Bu kategoriye görev ekle">＋</button>
-          <button class="ico" title="Kategori simgesi">${ico('smile')}</button>
-          ${cat.shared && !isOwner(cat) ? '' : '<button class="ren" title="Yeniden adlandır">✎</button>'}
-          ${cat.shared && !isOwner(cat) ? '' : '<button class="del" title="Kategoriyi sil">🗑</button>'}
+          ${isOwner(cat) ? `<button class="ico" title="Kategori simgesi">${ico('smile')}</button><button class="mem" title="Üye ekle / ortak yap">${ico('users')}</button><button class="ren" title="Yeniden adlandır">✎</button><button class="del" title="Kategoriyi sil">🗑</button>` : ''}
         </span>
       </div>
       <ul></ul>`;
@@ -455,28 +423,21 @@ function renderTodos() {
       sec.classList.toggle('collapsed');
     };
     head.querySelector('.add').onclick = () => startNewTask(cat);
-    head.querySelectorAll('.ico, .cat-ico').forEach(b => b.onclick = () => pickIcon(b, cat.icon, ic => setCatIcon(cat, ic)));
-    const memBtn = head.querySelector('.shared-mark');
-    if (memBtn) memBtn.onclick = () => openMembers(cat);
+    if (isOwner(cat)) head.querySelectorAll('.ico, .cat-ico').forEach(b => b.onclick = () => pickIcon(b, cat.icon, ic => setCatIcon(cat, ic)));
+    head.querySelectorAll('.shared-mark, .mem').forEach(b => b.onclick = () => openMembers(cat));
     const renBtn = head.querySelector('.ren'), delBtn = head.querySelector('.del');
     if (renBtn) {
       renBtn.onclick = () => renameCategory(cat, head);
       head.querySelector('.name').ondblclick = () => renameCategory(cat, head);
     }
     if (delBtn) delBtn.onclick = () => {
-      if (cat.shared) {
-        if (!confirm(`"${cat.name}" ortak kategorisi, içindeki görevlerle birlikte TÜM üyeler için silinsin mi?
-
-Bu işlem geri alınamaz.`)) return;
-        deleteSharedCategory(cat);
-        return;
-      }
-      const msg = cat.tasks.length
-        ? `"${cat.name}" kategorisi ve içindeki ${cat.tasks.length} görev silinsin mi?\n\n(Silinenler penceresinden ya da todo.md dosyasından geri getirebilirsin.)`
-        : `"${cat.name}" kategorisi silinsin mi?`;
+      const msg = cat.shared
+        ? `"${cat.name}" ortak kategorisi TÜM üyeler için silinsin mi?\n\n(Silinenler penceresinden geri getirebilirsin.)`
+        : cat.tasks.length
+          ? `"${cat.name}" kategorisi ve içindeki ${cat.tasks.length} görev silinsin mi?\n\n(Silinenler penceresinden geri getirebilirsin.)`
+          : `"${cat.name}" kategorisi silinsin mi?`;
       if (!confirm(msg)) return;
-      deleteCategory(cat);
-      saveTodos();
+      softDeleteCategory(cat);
     };
 
     // --- Kategori sürükleme (başlıktan tutup) ---
@@ -505,7 +466,6 @@ Bu işlem geri alınamaz.`)) return;
         todo.cats.splice(todo.cats.indexOf(d.cat), 1);
         todo.cats.splice(todo.cats.indexOf(cat) + (before ? 0 : 1), 0, d.cat);
       } else if (d.type === 'task') {
-        if (d.cat === cat && cat.shared) return endDrag();   // ortak kategoride sıra oluşturma tarihine göre
         const block = takeBlock(d, cat);
         setBlockLevel(block, 0);
         reinsert(cat, block, null);
@@ -536,7 +496,7 @@ Bu işlem geri alınamaz.`)) return;
   }
 
   $('#todoCount').textContent = open ? String(open) : '';
-  $('#filterMine').hidden = !sharedCats().length;
+  $('#filterMine').hidden = !todo.cats.some(c => c.shared);
   $('#filterMine').classList.toggle('on', mineOnly);
   if (mineOnly && !root.children.length) root.innerHTML = '<p class="muted" style="padding:8px 4px">Sana atanmış görev yok.</p>';
   $('#toggleDone').textContent = showDone ? 'Tamamlananları gizle' : 'Tamamlananları göster';
@@ -553,11 +513,11 @@ Bu işlem geri alınamaz.`)) return;
   renderStats();
 }
 
-// Kategori simgesi: ortak kategorilerde yalnızca bu cihazda saklanır (todo.md ortak kategoriyi tutmaz)
+// Kategori simgesi: kategori belgesinde durur (tüm üyelere görünür); yalnızca sahip değiştirir
 function setCatIcon(cat, icon) {
-  if (cat.shared) { const m = store.get('catIcons', {}); if (icon) m[sharedKey(cat)] = icon; else delete m[sharedKey(cat)]; store.set('catIcons', m); }
   cat.icon = icon || undefined;
-  saveTodos();
+  cloud.updateCategory(cat.cid, { simge: icon || null }).catch(syncError);
+  renderTodos();
 }
 const CAT_ICONS = ['💼', '🏠', '🛒', '📚', '💡', '🎯', '✈️', '💰', '🧾', '📞', '✉️', '🔧', '🧹', '🍽️', '💪', '🧘', '🎮', '🎵', '🎬', '📷', '🚗', '🐶', '🌱', '❤️', '🎓', '🧑‍💻', '📅', '⭐', '🔥', '📦', '🏥', '🎁', '🧠', '✏️', '📝', '🗂️', '🏦', '🛠️', '🧳', '🏃'];
 const iconPop = $('#iconPop');
@@ -720,8 +680,7 @@ function buildNewTaskRow() {
     if (p.level) task.level = p.level;
     if (!p.after || p.cat.tasks.indexOf(p.after) === -1) insertTask(p.cat, task);
     else { p.cat.tasks.splice(newTaskIndex(p), 0, task); p.cat.tasks = sortTree(p.cat.tasks); }
-    // Ortak kategoride sıra oluşturma tarihine göredir: zincirde yeni satır üst düzeyde kategorinin başında, alt görevde aynı üst görevin altında açılır
-    pendingNew = chain ? { cat: p.cat, after: p.cat.shared && !p.level ? null : (p.cat.shared ? p.after : task), level: p.level, due: todayISO(), rec: null, time: null, remind: [], text: '', manual: false } : null;
+    pendingNew = chain ? { cat: p.cat, after: task, level: p.level, due: todayISO(), rec: null, time: null, remind: [], text: '', manual: false } : null;
     pendingFocus = chain;
     saveTodos();
   };
@@ -779,8 +738,8 @@ function renameCategory(cat, head) {
       if (collapsed.delete(cat.name)) { collapsed.add(v); store.set('collapsedCats', [...collapsed]); }
       if (selectedCat === cat.name) selectCat(v);
       cat.name = v;
-      if (cat.shared) renameSharedCategory(cat, v);
-      saveTodos();
+      renameCloudCategory(cat, v);
+      renderTodos();
     } else renderTodos();
   };
   input.onkeydown = e => { if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false); };
@@ -788,13 +747,12 @@ function renameCategory(cat, head) {
 }
 const cleanCatName = s => s.replace(/[\r\n]+/g, ' ').replace(/^#+\s*/, '').trim().slice(0, 60);
 
-$('#addCat').onclick = () => addCategory(false);
-$('#addSharedCat').onclick = () => addCategory(true);
-function addCategory(shared) {
+$('#addCat').onclick = addCategory;
+function addCategory() {
   const root = $('#todoList');
   const sec = document.createElement('section');
   sec.className = 'cat';
-  sec.innerHTML = `<div class="cat-head"><span class="chev">▼</span><input class="cat-input" placeholder="${shared ? 'Ortak kategori adı…' : 'Kategori adı…'} (Enter)"></div>`;
+  sec.innerHTML = `<div class="cat-head"><span class="chev">▼</span><input class="cat-input" placeholder="Kategori adı… (Enter)"></div>`;
   root.append(sec);
   const input = sec.querySelector('input');
   input.focus();
@@ -804,14 +762,8 @@ function addCategory(shared) {
     if (done) return;
     done = true;
     const v = cleanCatName(input.value);
-    if (ok && v && shared) {
-      createSharedCategory(v);   // kategori buluttan dinleyiciyle gelince listede görünür
-      sec.remove();
-    } else if (ok && v) {
-      if (!activeCats().some(c => c.name === v)) todo.cats.push(newCat(v));
-      const created = activeCats().find(c => c.name === v);
-      saveTodos().then(() => startNewTask(created));
-    } else sec.remove();
+    if (ok && v && !activeCats().some(c => c.name === v)) { const c = createCategory(v); startNewTask(c); }
+    sec.remove();
   };
   input.onkeydown = e => { if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false); };
   input.onblur = () => finish(true);

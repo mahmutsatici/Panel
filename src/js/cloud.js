@@ -25,6 +25,7 @@ const AUTH_ERRORS = {
 const authError = e => AUTH_ERRORS[e?.code] || `Giriş yapılamadı (${e?.code || e?.message || 'bilinmeyen hata'}).`;
 
 function cloudInit() {
+  cloud.started = true;
   const emulator = !!settings.cloudEmulator;   // geliştirme: PANEL_FIREBASE_EMULATOR=1 ile Firebase emülatörüne bağlanır
   const config = emulator ? { apiKey: 'demo-key', authDomain: 'demo-panel.firebaseapp.com', projectId: 'demo-panel', appId: 'demo' } : CLOUD_CONFIG;
   if (!config || !window.CloudSDK) { cloud.ready = true; cloudChanged(); return; }
@@ -60,6 +61,7 @@ cloud.loadProfile = async () => {
     u.error = null;
     if (u.active) {
       u.admin = (await sdk.getDoc(sdk.doc(cloud.db, 'admins', u.uid))).exists();
+      store.set('profile', { uid: u.uid, active: true, admin: u.admin, ad: u.ad });
       cloud.loadSparkConfig();
       setTimeout(() => cloud.reportUsage().catch(() => {}), 60 * 1000);
     } else {
@@ -69,7 +71,12 @@ cloud.loadProfile = async () => {
         u.requested = true;
       } catch { u.requested = false; }
     }
-  } catch (e) { u.error = e.code || e.message; }
+  } catch (e) {
+    // İnternet yokken açılış: daha önce doğrulanmış hesap önbellekteki bilgiyle devam eder (veri Firestore önbelleğinden gelir)
+    const p = store.get('profile', null);
+    if (e.code === 'unavailable' && p?.uid === u.uid && p.active) Object.assign(u, { active: true, admin: !!p.admin, ad: p.ad || '', error: null });
+    else u.error = e.code || e.message;
+  }
   cloudChanged();
 };
 
@@ -155,7 +162,10 @@ cloud.now = () => fsd().serverTimestamp();
 // Üyesi olduğum kategoriler; cb([{ id, ad, sahip, uyeler, uyeAdlari }]) her değişimde çağrılır
 cloud.watchCategories = (email, cb, onError) => {
   const q = fsd().query(fsd().collection(cloud.db, 'categories'), fsd().where('uyeler', 'array-contains', email));
-  return fsd().onSnapshot(q, snap => countSnap(snap) || cb(snap.docs.map(d => ({ id: d.id, ...d.data({ serverTimestamps: 'estimate' }) }))), onError);
+  return fsd().onSnapshot(q, snap => countSnap(snap) || cb(snap.docs.map(d => {
+    const x = d.data({ serverTimestamps: 'estimate' });
+    return { id: d.id, ...x, olusturma: tsMs(x.olusturma), silinmeZamani: tsMs(x.silinmeZamani) };
+  })), onError);
 };
 
 // Bir kategorinin görevleri: açık olanlar + son günlerde bitenler; cb([görev]) her iki sorgu da yanıtlayınca çağrılır.
@@ -188,6 +198,16 @@ cloud.watchTasks = (cid, cb, onError) => {
   return () => unsubs.forEach(u => u());
 };
 
+// Tamamlanan görev geçmişi (sayfalı): bitirme zamanına göre yeniden eskiye; ekrandaki listede olmayan eski görevleri de getirir
+cloud.listDoneHistory = async (cid, after) => {
+  const col = fsd().collection(cloud.db, 'categories', cid, 'tasks');
+  const q = after ? fsd().query(col, fsd().orderBy('bitirmeZamani', 'desc'), fsd().startAfter(after), fsd().limit(50))
+    : fsd().query(col, fsd().orderBy('bitirmeZamani', 'desc'), fsd().limit(50));
+  const snap = await fsd().getDocs(q);
+  cloud.count(snap.docs.length, 0);
+  return { items: snap.docs.map(d => { const x = d.data(); return { ...x, id: d.id, bitirmeZamani: tsMs(x.bitirmeZamani) }; }), last: snap.docs[snap.docs.length - 1], more: snap.docs.length === 50 };
+};
+
 // Silinenler penceresi için: kategorinin yumuşak silinmiş görevleri (yalnızca istendiğinde okunur)
 cloud.listDeletedTasks = async cid => {
   const snap = await fsd().getDocs(fsd().query(fsd().collection(cloud.db, 'categories', cid, 'tasks'), fsd().where('silindi', '==', true)));
@@ -201,9 +221,63 @@ cloud.createTask = (cid, id, data) =>
 cloud.updateTask = (cid, id, patch) =>
   (cloud.count(0, 1), fsd().updateDoc(taskRef(cid, id), { ...patch, guncelleme: cloud.now() }));
 
-cloud.createCategory = (id, ad) => (cloud.count(0, 1), fsd().setDoc(fsd().doc(cloud.db, 'categories', id), {
-  ad, sahip: cloud.user.email, uyeler: [cloud.user.email], uyeAdlari: { [cloud.user.email]: cloud.user.ad || '' }, olusturma: cloud.now(),
+cloud.createCategory = (id, ad, extra = {}) => (cloud.count(0, 1), fsd().setDoc(fsd().doc(cloud.db, 'categories', id), {
+  ad, sahip: cloud.user.email, uyeler: [cloud.user.email], uyeAdlari: { [cloud.user.email]: cloud.user.ad || '' }, olusturma: cloud.now(), ...extra,
 }));
+// Toplu görev yazma (buluta taşıma): items = [{ id, data }]; her yazma grubu en fazla 400 işlem. Kategori belgesi önceden yazılmış olmalı (kurallar onu okur).
+cloud.writeTasks = async (cid, items, onProgress) => {
+  for (let i = 0; i < items.length; i += 400) {
+    const batch = fsd().writeBatch(cloud.db);
+    const now = cloud.now();
+    items.slice(i, i + 400).forEach(({ id, data }) => batch.set(taskRef(cid, id), { ...data, olusturma: now, guncelleme: now }));
+    await batch.commit();
+    cloud.count(0, Math.min(400, items.length - i));
+    onProgress?.(Math.min(i + 400, items.length));
+  }
+};
+// Sunucudaki görev sayısı (doğrulama): silinmişler dahil bütün belgeler
+cloud.countTasks = async cid => {
+  const snap = await fsd().getCountFromServer(fsd().collection(cloud.db, 'categories', cid, 'tasks'));
+  cloud.count(1, 0);
+  return snap.data().count;
+};
+// Toplu sayaç ekleme (taşıma): agg = { g: {gün: n}, s: {gün: dk}, sn: {gün: n}, k: {kategori: n} }; anahtarlar statDay biçiminde
+cloud.statsMerge = agg => {
+  const inc = fsd().increment, out = {};
+  for (const key of ['g', 's', 'sn', 'k']) {
+    out[key] = {};
+    for (const [k, v] of Object.entries(agg[key] || {})) { out[key][k] = inc(v); cloud.stats[key][k] = (cloud.stats[key][k] || 0) + v; }
+  }
+  cloud.count(0, 1);
+  return fsd().setDoc(statsRef(), out, { merge: true });
+};
+// Kategori alanlarını günceller (ad, simge, silindi...): yalnızca sahip; kurallar doğrular
+cloud.updateCategory = (cid, patch) => (cloud.count(0, 1), fsd().updateDoc(fsd().doc(cloud.db, 'categories', cid), patch));
+// Kişiye özel kategori sırası: users/{uid}/tercihler/kategori { sira: [cid…] }
+const orderRef = () => fsd().doc(cloud.db, 'users', cloud.user.uid, 'tercihler', 'kategori');
+cloud.watchCatOrder = (cb, onError) => fsd().onSnapshot(orderRef(), snap => { countSnap(snap); cb(snap.exists() ? snap.data().sira || [] : []); }, onError);
+cloud.setCatOrder = ids => (cloud.count(0, 1), fsd().setDoc(orderRef(), { sira: ids, guncelleme: cloud.now() }));
+cloud.stampTs = stamp => fsd().Timestamp.fromDate(new Date(stamp));
+
+// Tamamlama sayaçları (kişiye özel; tek belge): g = gün → bitirilen görev sayısı, s = gün → bitirme süresi toplamı (dakika),
+// sn = gün → süresi bilinen görev sayısı, k = kategori → toplam bitirilen. Anahtarlar "d20261102" biçimindedir.
+// Yalnızca benim tamamladıklarım sayılır; geri alınan görev için sayı düşürülür.
+cloud.stats = { g: {}, s: {}, sn: {}, k: {} };
+const statsRef = () => fsd().doc(cloud.db, 'users', cloud.user.uid, 'istatistik', 'ozet');
+cloud.statDay = iso => 'd' + iso.replace(/-/g, '');
+cloud.loadStats = async () => {
+  const snap = await fsd().getDoc(statsRef());
+  cloud.count(1, 0);
+  const d = snap.exists() ? snap.data() : {};
+  cloud.stats = { g: d.g || {}, s: d.s || {}, sn: d.sn || {}, k: d.k || {} };
+};
+cloud.statsAdd = (cid, dayIso, n, mins, durN) => {
+  const k = cloud.statDay(dayIso), st = cloud.stats, add = (o, key, v) => { o[key] = (o[key] || 0) + v; };
+  add(st.g, k, n); add(st.s, k, mins); add(st.sn, k, durN); add(st.k, cid, n);   // ekran hemen güncel kalsın
+  const inc = fsd().increment;
+  cloud.count(0, 1);
+  return fsd().setDoc(statsRef(), { g: { [k]: inc(n) }, s: { [k]: inc(mins) }, sn: { [k]: inc(durN) }, k: { [cid]: inc(n) } }, { merge: true });
+};
 cloud.setMembers = (cid, uyeler, uyeAdlari) => (cloud.count(0, 1), fsd().updateDoc(fsd().doc(cloud.db, 'categories', cid), { uyeler, uyeAdlari }));
 
 // Üyeyi çıkarır (sahip biri için ya da kişi kendi isteğiyle ayrılırken). Kurallar üye olmayan birini görevde kabul etmez;
@@ -221,21 +295,6 @@ cloud.removeMember = async (cid, email, uyeler, uyeAdlari) => {
     }
   }
   await cloud.setMembers(cid, uyeler, uyeAdlari);
-};
-cloud.renameCategory = (cid, ad) => (cloud.count(0, 1), fsd().updateDoc(fsd().doc(cloud.db, 'categories', cid), { ad }));
-
-// Kategoriyi siler: önce görevleri (kurallar görev silmeyi kategori belgesi varken izin verir), sonra kategoriyi
-cloud.deleteCategory = async cid => {
-  const snap = await fsd().getDocs(fsd().collection(cloud.db, 'categories', cid, 'tasks'));
-  cloud.count(snap.docs.length, snap.docs.length);
-  for (let i = 0; i < snap.docs.length; i += 400) {
-    const batch = fsd().writeBatch(cloud.db);
-    snap.docs.slice(i, i + 400).forEach(d => batch.delete(d.ref));
-    await batch.commit();
-  }
-  const batch = fsd().writeBatch(cloud.db);
-  batch.delete(fsd().doc(cloud.db, 'categories', cid));
-  await batch.commit();
 };
 
 // ============ Yönetici (admins/{uid} belgesi olan hesap; kurallar başkasına izin vermez) ============

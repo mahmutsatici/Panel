@@ -20,7 +20,8 @@ async function init() {
   document.querySelectorAll('select').forEach(enhanceSelect);
   document.querySelectorAll('input[list]').forEach(enhanceDatalist);   // yerel açılır listeler yerine uygulamanın kendi listesi
   setInterval(tickClock, 1000);
-  await Promise.all([loadTodos(), loadNoteList()]);
+  renderTodos();         // görevler buluttan gelir (giriş yapılınca shared.js dinlemeye başlar)
+  await loadNoteList();
   const last = store.get('lastNote', null);
   const first = notes.find(n => n.name === last) || notes[0];
   if (first) await openNote(first.name);
@@ -30,7 +31,6 @@ async function init() {
 
 // Panel tekrar öne gelince dışarıdan yapılan değişiklikleri (VS Code, Notepad…) al.
 window.addEventListener('focus', async () => {
-  if (!document.querySelector('.cat-input, .task-input, .cal-add input:focus') && !dragging) loadTodos();
   if (!dirty) {
     await saving;   // kendi kaydımız sürerken okuyup editörü gereksiz yere yenilemeyelim
     await loadNoteList();

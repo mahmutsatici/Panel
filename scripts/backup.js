@@ -31,7 +31,7 @@ function viaApp() {
       const r = JSON.parse(fs.readFileSync(out, 'utf8'));
       if (r.at >= t0 - 1000) {
         if (!r.ok) { console.error('Uygulama yedeği alamadı: ' + r.error); return false; }
-        console.log(`Yedek alındı (uygulama) → ${r.dest}  (${r.files} öğe; şehir: ${r.city}, müzik listesi: ${r.lists})`);
+        console.log(`Yedek alındı (uygulama) → ${r.dest}  (${r.files} öğe; şehir: ${r.city})`);
         return true;
       }
     } catch {}

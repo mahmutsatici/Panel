@@ -10,7 +10,9 @@ rules_version = '2';
 //   istekler/{uid}             izin listesinde olmayan hesabın "beni ekle" isteği (yönetici onaylar → allowed/{uid})
 //   kullanim/{uid}             her istemcinin günlük tahmini okuma/yazma sayısı (yönetici paneli için)
 //   ayarlar/spark              Spark (Gemini) model ayarları — herkes okur, yalnızca yönetici yazar
-//   categories/{cid}           ortak kategori: ad, sahip (e-posta), uyeler (e-posta listesi)
+//   categories/{cid}           kategori: ad, sahip (e-posta), uyeler (e-posta listesi), simge, silindi. Tek üyeli kategori = kişisel kategori.
+//   users/{uid}/tercihler/kategori   kişiye özel kategori sırası
+//   users/{uid}/istatistik/ozet      kişiye özel tamamlama sayaçları (gün/süre/kategori)
 //   categories/{cid}/tasks/{tid}  görevler
 //
 // İzin listesi e-posta değil UID ile tutulur: biri izin listesindeki bir kişinin e-postasıyla önceden hesap açsa bile
@@ -63,6 +65,27 @@ service cloud.firestore {
         && request.resource.data.guncelleme == request.time;
     }
 
+    // Kişiye özel kategori sırası: yalnızca kendi belgesi (users/{uid}/tercihler/kategori)
+    match /users/{uid}/tercihler/{doc} {
+      allow get: if activeUser() && request.auth.uid == uid;
+      allow list, delete: if false;
+      allow create, update: if activeUser() && request.auth.uid == uid && doc == 'kategori'
+        && request.resource.data.keys().hasOnly(['sira', 'guncelleme'])
+        && request.resource.data.sira is list && request.resource.data.sira.size() <= 300
+        && request.resource.data.guncelleme == request.time;
+    }
+    // Kişiye özel istatistik sayaçları (tek belge: günlük/süre/kategori sayıları; artırma işlemleriyle güncellenir)
+    match /users/{uid}/istatistik/{doc} {
+      allow get: if activeUser() && request.auth.uid == uid;
+      allow list, delete: if false;
+      allow create, update: if activeUser() && request.auth.uid == uid && doc == 'ozet'
+        && request.resource.data.keys().hasOnly(['g', 's', 'sn', 'k'])
+        && request.resource.data.get('g', {}) is map && request.resource.data.get('g', {}).size() <= 5000
+        && request.resource.data.get('s', {}) is map && request.resource.data.get('s', {}).size() <= 5000
+        && request.resource.data.get('sn', {}) is map && request.resource.data.get('sn', {}).size() <= 5000
+        && request.resource.data.get('k', {}) is map && request.resource.data.get('k', {}).size() <= 500;
+    }
+
     // Kullanım sayacı: her aktif hesap yalnızca kendi belgesine yazar; yönetici hepsini okur.
     match /kullanim/{uid} {
       allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
@@ -80,7 +103,9 @@ service cloud.firestore {
       function isOwner() { return resource.data.sahip == me(); }
       function isMember() { return me() in resource.data.uyeler; }
       function validCat(d) {
-        return d.keys().hasOnly(['ad', 'sahip', 'uyeler', 'uyeAdlari', 'olusturma'])
+        return d.keys().hasOnly(['ad', 'sahip', 'uyeler', 'uyeAdlari', 'olusturma', 'simge', 'silindi', 'silinmeZamani'])
+          && (d.get('simge', null) == null || (d.simge is string && d.simge.size() <= 16))
+          && (d.get('silindi', null) == null || d.silindi is bool)
           && d.ad is string && d.ad.size() > 0 && d.ad.size() <= 60
           && d.sahip is string
           && d.uyeler is list && d.uyeler.size() >= 1 && d.uyeler.size() <= 20
@@ -102,6 +127,8 @@ service cloud.firestore {
           isOwner()                                   // sahip: ad ve üyeleri değiştirir
           || (                                         // üye: yalnızca kendini çıkarabilir
             request.resource.data.ad == resource.data.ad
+            && request.resource.data.get('simge', null) == resource.data.get('simge', null)
+            && request.resource.data.get('silindi', null) == resource.data.get('silindi', null)
             && request.resource.data.uyeler.size() == resource.data.uyeler.size() - 1
             && !(me() in request.resource.data.uyeler)
             && request.resource.data.uyeler.hasAll(resource.data.uyeler.removeAll([me()]))
@@ -117,7 +144,7 @@ service cloud.firestore {
           // atananlar (liste), ust (alt görevin üst görev kimliği), saat, hatirlat, oncelik: sonradan eklenen alanlar; eski belgelerde yoktur (get ile okunur)
           return d.keys().hasOnly(['metin', 'bitti', 'son', 'tekrar', 'olusturan', 'atanan', 'olusturma',
                                     'bitirmeZamani', 'bitiren', 'silindi', 'silenKisi', 'guncelleme',
-                                    'atananlar', 'ust', 'saat', 'hatirlat', 'oncelik'])
+                                    'atananlar', 'ust', 'saat', 'hatirlat', 'oncelik', 'sira', 'eklendi'])
             && d.metin is string && d.metin.size() > 0 && d.metin.size() <= 500
             && d.bitti is bool && d.silindi is bool
             && (d.son == null || (d.son is string && d.son.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')))
@@ -128,6 +155,8 @@ service cloud.firestore {
             && (d.get('saat', null) == null || (d.saat is string && d.saat.matches('^[0-9]{2}:[0-9]{2}$')))
             && (d.get('hatirlat', null) == null || (d.hatirlat is list && d.hatirlat.size() <= 10))
             && (d.get('oncelik', null) == null || (d.oncelik is int && d.oncelik >= 0 && d.oncelik <= 3))
+            && (d.get('sira', null) == null || d.sira is number)
+            && (d.get('eklendi', null) == null || (d.eklendi is string && d.eklendi.size() <= 20))
             && (d.bitiren == null || d.bitiren in cat().uyeler)
             && (d.bitti == true || d.bitiren == null)
             && d.guncelleme == request.time;

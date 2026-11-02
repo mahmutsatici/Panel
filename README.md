@@ -11,9 +11,10 @@ Saat, tarih, hava durumu, yapılacaklar, Markdown notlar ve sesli asistan SPARK 
 
 ## Veriler
 `%APPDATA%\Panel\data\` altında:
-- `todo.md` — kategoriler `## Ad` başlıkları, görevler `- [ ] görev` / `- [x] görev` satırları.
-  Dosyadaki sıra ekrandaki sıradır: her kategoride yapılmamışlar (yeniden eskiye), sonra yapılmışlar (en son tamamlanandan eskiye).
+- `todo.md` — görevlerin **bulut yedeği** (kaynak değil): kategoriler `## Ad` başlıkları, görevler `- [ ] görev` / `- [x] görev` satırları.
+  Ayarlar → Bildirim & yedek'ten ne sıklıkla yazılacağı seçilir (her değişiklikte / 5 dk / 30 dk / günlük / hiç).
   Örnek satır: `- [ ] rapor yaz 🔁 her hafta 📅 2026-10-10 <!-- eklendi:2026-10-05T15:40 -->`
+- `todo-eski-<tarih>.md` — buluta ilk taşımadan önce alınan, eski yerel `todo.md`'nin kopyası.
   (`🔁` tekrar kuralı, `📅` son tarih; yorum içindeki zamanlar arka planda tutulur ve Markdown'da görünmez)
   Tekrar kuralları: `her gün`, `hafta içi`, `her hafta`, `her 2 hafta`, `her ay`, `her yıl`, `her N gün/hafta/ay`.
 - `notes\resimler\` — notlara yapıştırılan resimler. Notta `![resim|300](resimler/…)` olarak durur
@@ -63,11 +64,14 @@ listesine bakıp cevap verme Gemini'de oluyor, ayrı bir yerel konuşma tanımay
 - **Yedek model:** ana model "yoğun talep" / kota / bulunamadı hatası verirse Ayarlar → Spark → Yedek konuşma modelleri sırayla denenir.
 - Ses ve görev listesi metni yalnızca konuştuğun anda Google'a gider; konuşma geçmişi yalnızca bu bilgisayarda tutulur (son 30).
 
-## Ortak kategoriler (çok kullanıcılı, isteğe bağlı)
-Ayarlar → Hesap'tan e-posta + şifreyle giriş yapılırsa Yapılacaklar'da **＋ Ortak** ile başkalarıyla paylaşılan kategoriler açılır
-(üye ekleme/çıkarma 👥 düğmesinden, görev atama satırdaki yuvarlak düğmeden, **Bana atananlar** süzgeci). Giriş yapılmazsa uygulama tamamen yereldir.
-- **Gizlilik:** yalnızca ortak kategoriler ve görevleri Firebase'e (Firestore, Google) gider; kişisel kategoriler, notlar, ayarlar ve Gemini anahtarı
-  asla gitmez. Spark ortak görevleri de görür (Ayarlar → Spark → Ortak görevler ile kapatılabilir). Yerel yedek: `dataortak-kopya.json`.
+## Bulut: giriş zorunlu, görevler Firebase'de
+Panel'e e-posta + şifreyle **giriş yapmak zorunludur**; görevler ve kategoriler Firestore'da (Google) tutulur. Kişisel kategori = tek üyeli kategori;
+üye eklenince (başlıktaki 👥) ortak olur, görev atama satırdaki yuvarlak düğmeden, **Bana atananlar** süzgeciyle yapılır.
+- **Eski yerel görevler:** güncellemeden sonra ilk girişte `todo.md`'deki görevler buluta taşınsın mı diye sorulur; dosya önce yedeklenir, taşıma sunucu sayımıyla doğrulanır.
+- **Kategori sırası** kişiye özeldir. Tamamlanan görevlerin tamamı bulutta kalır: ekranda açık görevler ve son 14 günde bitenler görünür, eskiler **Geçmiş** penceresinden sayfa sayfa okunur.
+  İstatistikler kişisel sayaçlardan (tüm zamanlar) gelir.
+- **Gizlilik:** görevler, kategoriler ve istatistik sayaçları Firebase'e (Firestore, Google) gider; notlar, ayarlar ve Gemini anahtarı asla gitmez. Yönetici Firebase konsolunda görevleri okuyabilir.
+  Spark ortak (birden çok üyeli) kategorilerdeki görevleri de görür (Ayarlar → Spark → Ortak görevler ile kapatılabilir).
 - **Erişim:** hesapları yönetici Firebase konsolundan açar (kendi kendine kayıt yok). Yeni kişi girince Ayarlar → Yönetici'de "Bekleyen istekler"e düşer; yönetici onaylar.
   Güvenlik kuralları `firebase/firestore.rules` içindedir ve Firebase emülatöründe test edilir (`npm run test:rules`).
 - **Kendi Firebase projen:** `src/js/cloud-config.js` içine kendi web yapılandırmanı yaz (`null` = bulut kapalı), kuralları yayınla,
@@ -75,7 +79,7 @@ Ayarlar → Hesap'tan e-posta + şifreyle giriş yapılırsa Yapılacaklar'da **
 
 ## Kod yapısı
 `src/js/` altında bölümler: `core` (ortak yardımcılar, tarih penceresi, doğal dil), `clock`, `weather`, `todos`,
-`calendar`, `assistant` (SPARK), `stats`, `notes`, `trash`, `layout`, `settings`, `cloud` + `shared` + `admin` (ortak kategoriler); `src/app.js` başlangıç.
+`calendar`, `assistant` (SPARK), `stats`, `notes`, `trash`, `layout`, `settings`, `cloud` + `shared` + `admin` + `gate` + `migrate` + `history` (bulut); `src/app.js` başlangıç.
 Sabah bildirimi, otomatik yedek ve Gemini API çağrısı `main.js` içindedir (zamanlayıcı dakikada bir kontrol eder).
 - `notes\*.md` — her not ayrı bir Markdown dosyası
 - `settings.json` — şehir, tema, otomatik başlatma, hava durumu önbelleği

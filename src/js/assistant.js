@@ -266,8 +266,7 @@ function resolveCategory(name) {
   if (!clean) return currentCat();
   const existing = activeCats().find(c => lower(c.name) === lower(clean));
   if (existing) return existing;
-  todo.cats.push(newCat(clean));
-  return activeCats().find(c => c.name === clean);
+  return createCategory(clean);
 }
 
 // ============ Ses kaydı ============

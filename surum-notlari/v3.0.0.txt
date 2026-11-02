@@ -1,0 +1,16 @@
+Panel 3.0.0 — Görevler artık bulutta (giriş zorunlu)
+===================================================
+
+ÖNEMLİ (güncellemeden ÖNCE): Firebase konsolunda Firestore → Rules sayfasına firebase/firestore.rules dosyasının güncel halini yapıştırıp Publish et.
+Yeni alanlar (görev sırası, kategori simgesi/silme, kişisel sıra ve istatistik) eski kurallarla reddedilir.
+
+• Giriş zorunlu: uygulama açılınca oturum yoksa giriş ekranı gelir; hesap yönetici onayı bekliyorsa bunu söyler. İnternet yokken, daha önce giriş yapılmış hesap önbellekten açılır.
+• Görevlerin tek kaynağı bulut (Firebase). Kişisel kategori = tek üyeli kategori; 👥 ile üye eklenince ortak olur ("＋ Ortak" düğmesi kalktı).
+• Eski görevlerin taşınması: ilk girişte, bu bilgisayardaki todo.md'de görev varsa "buluta taşınsın mı?" sorulur. Dosya önce todo-eski-<tarih>.md olarak yedeklenir;
+  kategoriler, alt görevler, sıra, özgün eklenme/tamamlanma zamanları, silinenler ve istatistik sayaçları taşınır; sonunda sunucudaki kayıtlar sayılıp doğrulanır.
+  "Şimdi değil" dersen todo.md'ye dokunulmaz ve sonraki açılışta yeniden sorulur.
+• todo.md artık bulutun otomatik yedeği: ne sıklıkla yazılacağı Ayarlar → Bildirim & yedek → "Yerel yedek"te seçilir (her değişiklikte / 5 dk / 30 dk / günlük / hiç).
+• Görev sırası (sürükle-bırak) tüm kategorilerde çalışır ve bulutta saklanır; kategori sırası kişiye özeldir.
+• Kategoriler silinmez, "silindi" işaretlenir; Silinenler penceresinden geri getirilir. Kategori simgesi kategori belgesinde durur (üyelere de görünür).
+• Kategoriler arası sürükleyerek taşıma: görev hedefe kopyalanır, kaynaktaki silinir.
+• Tüm zamanların tamamlanan görevleri bulutta kalır: Yapılacaklar başlığındaki "Geçmiş" düğmesiyle sayfa sayfa okunur. İstatistikler kişisel sayaçlardan (tüm zamanlar) hesaplanır.

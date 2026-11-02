@@ -12,35 +12,29 @@ function formatDuration(hours) {
   return `${days.toLocaleString('tr-TR', { maximumFractionDigits: days < 10 ? 1 : 0 })} gün`;
 }
 
+// Tamamlama sayıları bulutta tutulan kişisel sayaçlardan gelir (cloud.stats: g = gün → sayı, s = gün → toplam dakika, sn = gün → süresi bilinen görev):
+// tüm zamanlar tek belgeden okunur; görevlerin kendisi (açık ve son günlerde biten) yalnızca açık/geciken sayısı için kullanılır.
+const statCount = iso => cloud.stats.g[cloud.statDay(iso)] || 0;
 function computeStats() {
   const today = todayISO();
   const weekStart = addDays(today, -((parseISODate(today).getDay() + 6) % 7));
   const lastWeekStart = addDays(weekStart, -7);
-  const perDay = Array(7).fill(0);
-  let thisWeek = 0, lastWeek = 0, open = 0, overdue = 0;
-  const durations = [];
-  const monthAgo = addDays(today, -30);
-
+  const perDay = Array.from({ length: 7 }, (_, i) => statCount(addDays(weekStart, i)));
+  const thisWeek = perDay.reduce((a, b) => a + b, 0);
+  let lastWeek = 0, open = 0, overdue = 0, sumMin = 0, avgCount = 0;
+  for (let i = 0; i < 7; i++) lastWeek += statCount(addDays(lastWeekStart, i));
   for (const { task } of allTasks()) {
-    if (!task.done) {
-      if (!onMyPlate(task)) continue;
-      open++;
-      if (task.due && task.due < today) overdue++;
-      continue;
-    }
-    if (!task.completed || !ownDone(task)) continue;
-    const day = task.completed.slice(0, 10);
-    if (day >= weekStart) {
-      const i = dayDiffBetween(weekStart, day);
-      if (i >= 0 && i < 7) { perDay[i]++; thisWeek++; }
-    } else if (day >= lastWeekStart) lastWeek++;
-    if (task.created && day >= monthAgo) {
-      const h = (new Date(task.completed) - new Date(task.created)) / 36e5;
-      if (h >= 0) durations.push(h);
-    }
+    if (task.done || !onMyPlate(task)) continue;
+    open++;
+    if (task.due && task.due < today) overdue++;
   }
-  const avg = durations.length ? durations.reduce((a, b) => a + b, 0) / durations.length : null;
-  return { perDay, thisWeek, lastWeek, open, overdue, avg, avgCount: durations.length, todayIndex: dayDiffBetween(weekStart, today) };
+  for (let i = 0; i < 30; i++) {
+    const k = cloud.statDay(addDays(today, -i));
+    sumMin += cloud.stats.s[k] || 0;
+    avgCount += cloud.stats.sn[k] || 0;
+  }
+  const avg = avgCount ? sumMin / avgCount / 60 : null;   // saat
+  return { perDay, thisWeek, lastWeek, open, overdue, avg, avgCount, todayIndex: dayDiffBetween(weekStart, today) };
 }
 // Tam ekran için ek istatistikler: günlük seri, aylık toplam, son 12 hafta, yaklaşan günler, kategori dökümü
 const fmtWeekLabel = new Intl.DateTimeFormat('tr-TR', { day: 'numeric', month: 'short' });
@@ -48,10 +42,8 @@ const fmtDayShort = new Intl.DateTimeFormat('tr-TR', { weekday: 'short', day: 'n
 function computeMoreStats() {
   const today = todayISO();
   const doneByDay = new Map();
-  for (const { task } of allTasks()) {
-    if (!task.done || !task.completed || !ownDone(task)) continue;
-    const d = task.completed.slice(0, 10);
-    doneByDay.set(d, (doneByDay.get(d) || 0) + 1);
+  for (const [k, n] of Object.entries(cloud.stats.g)) {
+    if (n > 0) doneByDay.set(`${k.slice(1, 5)}-${k.slice(5, 7)}-${k.slice(7, 9)}`, n);
   }
   let monthDone = 0;
   for (const [d, n] of doneByDay) if (d.slice(0, 7) === today.slice(0, 7)) monthDone += n;
@@ -80,8 +72,9 @@ function computeMoreStats() {
     const r = { cat, open: 0, late: 0, done: 0, week: 0 };
     for (const t of cat.tasks) {
       if (!t.done) { r.open++; if (t.due && t.due < today) r.late++; }
-      else { r.done++; if (t.completed && t.completed.slice(0, 10) >= weekStart) r.week++; }
+      else if (t.completed && t.completed.slice(0, 10) >= weekStart && ownDone(t)) r.week++;
     }
+    r.done = Math.max(0, cloud.stats.k[cat.cid] || 0);   // benim tamamladıklarım (tüm zamanlar)
     return r;
   });
   return { todayDone: doneByDay.get(today) || 0, monthDone, streak, best, weeks, upcoming, cats };

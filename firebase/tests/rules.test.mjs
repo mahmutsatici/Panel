@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { test, before, after, beforeEach, describe } from 'node:test';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, getDocs, serverTimestamp, setLogLevel } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, collection, query, where, getDocs, serverTimestamp, increment, setLogLevel } from 'firebase/firestore';
 
 setLogLevel('silent');   // reddedilen yazmalar beklenen davranış; SDK uyarılarıyla çıktıyı kirletme
 
@@ -109,6 +109,36 @@ describe('izin listesi ve giriş', () => {
     await assertFails(setDoc(doc(db(ADMIN), 'ayarlar', 'spark'), { ...ok(), sesModelleri: Array(11).fill('m') }));
     await assertFails(setDoc(doc(db(ADMIN), 'ayarlar', 'spark'), { ...ok(), fazla: 1 }));
     await assertFails(getDocs(collection(db(ADMIN), 'ayarlar')));
+  });
+  test('kişisel kategori: simge ve yumuşak silme yalnızca sahipten; üye bunları değiştiremez', async () => {
+    await assertSucceeds(updateDoc(doc(db(ALI), 'categories', 'k1'), { simge: '⭐', silindi: true, silinmeZamani: serverTimestamp() }));
+    await assertFails(updateDoc(doc(db(VELI), 'categories', 'k1'), { simge: '🔥' }));
+    await assertFails(updateDoc(doc(db(VELI), 'categories', 'k1'), { silindi: true }));
+    await assertFails(updateDoc(doc(db(ALI), 'categories', 'k1'), { simge: 'x'.repeat(17) }));
+    await assertFails(updateDoc(doc(db(ALI), 'categories', 'k1'), { silindi: 'evet' }));
+    // üye kendini çıkarırken simge/silindi'ye dokunamaz ama çıkabilir
+    await assertSucceeds(updateDoc(doc(db(VELI), 'categories', 'k1'), { uyeler: [ALI.email] }));
+  });
+  test('görev sırası (sira) ve özgün eklenme zamanı (eklendi) alanları', async () => {
+    const f = db(ALI);
+    await assertSucceeds(setDoc(doc(f, 'categories/k1/tasks', 'a'), task({ sira: 1.5, eklendi: '2026-10-01T09:00' })));
+    await assertSucceeds(updateDoc(doc(f, 'categories/k1/tasks/a'), { sira: -3, guncelleme: serverTimestamp() }));
+    await assertFails(setDoc(doc(f, 'categories/k1/tasks', 'b'), task({ sira: 'ilk' })));
+    await assertFails(setDoc(doc(f, 'categories/k1/tasks', 'c'), task({ eklendi: 'x'.repeat(21) })));
+  });
+  test('kişiye özel kategori sırası ve istatistik belgeleri yalnızca sahibine açıktır', async () => {
+    await assertSucceeds(setDoc(doc(db(ALI), 'users/' + ALI.uid + '/tercihler/kategori'), { sira: ['k1', 'k2'], guncelleme: serverTimestamp() }));
+    await assertSucceeds(getDoc(doc(db(ALI), 'users/' + ALI.uid + '/tercihler/kategori')));
+    await assertFails(getDoc(doc(db(VELI), 'users/' + ALI.uid + '/tercihler/kategori')));
+    await assertFails(setDoc(doc(db(VELI), 'users/' + ALI.uid + '/tercihler/kategori'), { sira: [], guncelleme: serverTimestamp() }));
+    await assertFails(setDoc(doc(db(ALI), 'users/' + ALI.uid + '/tercihler/baska'), { sira: [], guncelleme: serverTimestamp() }));
+    await assertFails(setDoc(doc(db(ALI), 'users/' + ALI.uid + '/tercihler/kategori'), { sira: 'x', guncelleme: serverTimestamp() }));
+    await assertFails(setDoc(doc(db(PASIF), 'users/' + PASIF.uid + '/tercihler/kategori'), { sira: [], guncelleme: serverTimestamp() }));
+    await assertSucceeds(setDoc(doc(db(ALI), 'users/' + ALI.uid + '/istatistik/ozet'), { g: { d20261102: 3 }, s: { d20261102: 120 }, sn: { d20261102: 3 }, k: { k1: 3 } }));
+    await assertSucceeds(updateDoc(doc(db(ALI), 'users/' + ALI.uid + '/istatistik/ozet'), { 'g.d20261103': increment(1) }));
+    await assertFails(getDoc(doc(db(VELI), 'users/' + ALI.uid + '/istatistik/ozet')));
+    await assertFails(setDoc(doc(db(ALI), 'users/' + ALI.uid + '/istatistik/ozet'), { g: 5 }));
+    await assertFails(setDoc(doc(db(ALI), 'users/' + ALI.uid + '/istatistik/ozet'), { g: {}, fazla: 1 }));
   });
   test('kullanım sayacı: aktif hesap yalnızca kendi belgesine yazar; yönetici hepsini okur', async () => {
     const ok = { eposta: CAN.email, gun: '2026-10-27', okuma: 12, yazma: 3, guncelleme: serverTimestamp() };

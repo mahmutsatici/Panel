@@ -115,8 +115,8 @@
           </span>
           <button class="text-btn" id="filterMine" title="Yalnızca bana atanan görevleri göster" hidden>Bana atananlar</button>
           <button class="text-btn" id="toggleDone"></button>
+          <button class="text-btn" id="openHistory" title="Tüm zamanların tamamlanan görevleri">Geçmiş</button>
           <button class="text-btn" id="addCat" title="Yeni kategori">＋ Kategori</button>
-          <button class="text-btn" id="addSharedCat" title="Başkalarıyla ortak çalışacağın yeni kategori" hidden>＋ Ortak</button>
         </div>
       </div>
       <div id="todoList" class="todo-list"></div>
@@ -164,6 +164,41 @@
     <p class="as-heard" id="asHeard"></p>
     <p class="as-answer" id="asAnswer"></p>
   </div>
+
+  <!-- Giriş kapısı: giriş zorunludur (js/gate.js). Oturum yoksa ya da hesap onaylanmamışsa uygulamanın önünde durur. -->
+  <div class="login-gate" id="loginGate" hidden>
+    <div class="gate-box">
+      <img src="icons/logo.svg" alt="" draggable="false" class="gate-logo">
+      <h2>Panel</h2>
+      <p class="gate-msg" id="gateMsg"></p>
+      <form id="gateForm" class="gate-form" hidden>
+        <label>E-posta<input id="gateEmail" type="email" autocomplete="username" spellcheck="false"></label>
+        <label>Şifre<input id="gatePass" type="password" autocomplete="current-password"></label>
+        <button type="submit" class="primary" id="gateSignIn">Giriş yap</button>
+        <button type="button" class="link" id="gateReset">Şifremi unuttum</button>
+      </form>
+      <div class="gate-actions" id="gateActions" hidden>
+        <button type="button" id="gateRefresh">Durumu yenile</button>
+        <button type="button" id="gateSignOut">Çıkış yap</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Yerel görevleri buluta taşıma (js/migrate.js) -->
+  <dialog id="migrateDlg">
+    <form method="dialog" class="settings">
+      <h2 class="dlg-title">Görevlerin buluta taşınsın mı?</h2>
+      <p id="migText"></p>
+      <ul class="trash-list" id="migList"></ul>
+      <p class="muted">Taşıma sırasında yerel <b>todo.md</b> dosyan olduğu gibi yedeklenir (<code>todo-eski-….md</code>); hiçbir şey silinmez. Taşıdıktan sonra görevlerin tek kaynağı bulut olur ve todo.md bulutun otomatik yedeği olarak yazılır.</p>
+      <progress id="migBar" max="100" value="0" hidden></progress>
+      <p class="mem-msg" id="migMsg"></p>
+      <div class="row end">
+        <button type="button" id="migLater">Şimdi değil</button>
+        <button type="button" class="primary" id="migGo">Buluta taşı</button>
+      </div>
+    </form>
+  </dialog>
 
   <!-- Ayarlar: solda kategoriler, sağda seçili kategorinin sayfası (js/settings.js) -->
   <dialog id="settingsDlg">
@@ -318,6 +353,18 @@
             </div>
             <p class="muted">Bilgisayar o saatte kapalıysa, açıldığında gönderilir.</p>
 
+            <h3>Yerel yedek (todo.md)</h3>
+            <p class="muted">Görevlerin tek kaynağı buluttur; Panel, görevlerinin bir kopyasını bu bilgisayardaki <b>todo.md</b> dosyasına yazar (bulut erişilemezse elinde yedek olsun).</p>
+            <label>Ne sıklıkla yazılsın
+              <select id="mirrorEvery">
+                <option value="change">Her değişiklikten birkaç saniye sonra</option>
+                <option value="5">En fazla 5 dakikada bir</option>
+                <option value="30">En fazla 30 dakikada bir</option>
+                <option value="daily">Günde bir</option>
+                <option value="off">Hiç yazma</option>
+              </select>
+            </label>
+
             <h3>Otomatik yedek</h3>
             <label class="check"><input type="checkbox" id="backupChk"> Veri klasörünü her gün yedekle (son 7 gün saklanır)</label>
             <div class="row">
@@ -364,6 +411,17 @@
   </dialog>
 
   <!-- Silinenler -->
+  <dialog id="historyDlg">
+    <form method="dialog" class="settings">
+      <h2 class="dlg-title">Geçmiş · tamamlanan görevler</h2>
+      <label>Kategori <select id="histCat"></select></label>
+      <ul class="trash-list" id="histList"></ul>
+      <p class="muted" id="histMsg"></p>
+      <div class="row"><button type="button" id="histMore" hidden>Daha eski görevleri getir</button></div>
+      <div class="row end"><button value="close" class="primary">Kapat</button></div>
+    </form>
+  </dialog>
+
   <dialog id="trashDlg">
     <form method="dialog" class="settings trash">
       <h2>Silinenler</h2>
@@ -386,6 +444,9 @@
   <script src="js/weather.js"></script>
   <script src="js/todos.js"></script>
   <script src="js/shared.js"></script>
+  <script src="js/gate.js"></script>
+  <script src="js/migrate.js"></script>
+  <script src="js/history.js"></script>
   <script src="js/todoviews.js"></script>
   <script src="js/calendar.js"></script>
   <script src="js/reminders.js"></script>

@@ -9,9 +9,9 @@ Aşağıdaki davranış ilkeleri [multica-ai/andrej-karpathy-skills](https://git
 - `main.js`: Electron ana süreç (pencere, tray, IPC, yedekleme, zamanlanmış bildirimler, otomatik başlatma).
 - `preload.js`: ana süreç ile arayüz arasındaki tek köprü. Yeni IPC kanalı burada ve `registerIpc()` içinde birlikte eklenir.
 - `src/index.html`, `src/styles.css`, `src/app.js`: arayüz kabuğu ve giriş noktası.
-- `src/js/`: özellik başına bir modül (`core`, `layout`, `clock`, `weather`, `todos`, `calendar`, `stats`, `notes`, `trash`, `settings`, `cloud`, `shared`, `admin`, `reminders`, `todoviews`, `icons`). `core.js` ortak yardımcıları barındırır; `cloud.js` Firebase girişi/veri erişimi (Firebase'e yalnızca o dokunur), `shared.js` ortak kategorilerin görev listesiyle eşitlenmesi (todo.md'ye yazılmaz; yerel yedek `ortak-kopya.json`).
+- `src/js/`: özellik başına bir modül (`core`, `layout`, `clock`, `weather`, `todos`, `calendar`, `stats`, `notes`, `trash`, `settings`, `cloud`, `shared`, `admin`, `reminders`, `todoviews`, `icons`, `gate`, `migrate`, `history`). `core.js` ortak yardımcıları barındırır; `cloud.js` Firebase girişi/veri erişimi (Firebase'e yalnızca o dokunur), `shared.js` tüm kategorilerin ve görevlerin buluttan eşitlenmesi (görevlerin tek kaynağı Firestore; `todo.md` bulutun otomatik yedeğidir, sıklığı Ayarlar → Bildirim & yedek'te seçilir), `gate.js` zorunlu giriş ekranı, `migrate.js` eski yerel görevleri buluta taşıma, `history.js` tamamlanan görev geçmişi.
 - `scripts/build.js`: esbuild ile paketleme. `scripts/editor-entry.js` not editörünün giriş noktası.
-- Veri dosyaları (`todo.md`, `settings.json`, not dosyaları) Markdown/JSON olarak diskte tutulur; biçimlerini bozma.
+- Veri dosyaları (`todo.md` — bulut yedeği, `settings.json`, not dosyaları) Markdown/JSON olarak diskte tutulur; biçimlerini bozma. Görevler giriş zorunlu olduğundan bulutta yaşar (kişisel kategori = tek üyeli kategori).
 
 ## Komutlar
 

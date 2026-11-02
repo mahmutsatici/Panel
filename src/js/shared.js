@@ -1,18 +1,19 @@
-// ============ Ortak kategoriler (bulut) ============
-// Ortak kategori, yerel kategorilerle aynı listede (todo.cats) durur ama kaynağı Firestore'dur; todo.md'ye yazılmaz.
-//   { name, tasks, hidden: [], shared: true, cid, sahip, uyeler, uyeAdlari, base: Map(görev id → imza) }
-// Görev nesneleri yerelkilerle aynı biçimde (done, text, due, rec, created, completed, time, remind, priority, level) + { id, createdBy, assignees, completedBy, parentId }.
-// Alt görevler buluttaki "ust" alanıyla (üst görevin kimliği) tutulur; ekranda level ile sıralanır (sortSharedTree).
+// ============ Kategoriler ve görevler (bulut) ============
+// Tüm kategoriler (kişisel ve ortak) Firestore'dadır; todo.cats bu bulut verisinin bellekteki halidir.
+// Kişisel kategori = tek üyeli kategori; üye eklenince ortak olur (cat.shared = birden fazla üye).
+//   { name, tasks, cid, sahip, uyeler, uyeAdlari, icon, deleted, shared, base: Map(görev id → imza) }
+// Görev nesneleri: { done, text, due, rec, created, completed, time, remind, priority, level, id, createdBy, assignees, completedBy, parentId, sira }.
+// Alt görevler buluttaki "ust" alanıyla (üst görevin kimliği), sıra "sira" alanıyla (küçük olan üstte) tutulur.
 // Yazma yolu: arayüz görevi her zamanki gibi değiştirir, saveTodos() → pushShared() imzası değişenleri buluta gönderir.
-// Okuma yolu: Firestore dinleyicileri görevleri bu nesnelere işler (applyTasks). Sıralama: oluşturma zamanı (yeni üstte).
-let sync = null;   // { email, unsubCats, taskUnsubs: Map(cid → unsub) } — yalnızca giriş yapılmış ve izinli hesapta
+// Okuma yolu: Firestore dinleyicileri görevleri bu nesnelere işler (applyTasks).
+// todo.md artık kaynak değildir: bulutun otomatik yedeğidir (scheduleMirror).
+let sync = null;   // { email, unsubCats, unsubOrder, taskUnsubs: Map(cid → unsub), catsLoaded } — yalnızca giriş yapılmış ve izinli hesapta
 
-const sharedCats = () => todo.cats.filter(c => c.shared);
-const sharedKey = cat => cat.shared ? `c:${cat.cid}` : `l:${cat.name}`;
+const cloudCats = () => todo.cats.filter(c => c.cid);
 // Buluta giden alanlar (Firestore alan adlarıyla); imza değişimi hangi alanların gönderileceğini belirler
 const fieldsOf = (t, ust) => ({
   metin: t.text, bitti: !!t.done, son: t.due || null, tekrar: t.rec || null, atananlar: t.assignees || [],
-  saat: t.time || null, hatirlat: t.remind || [], oncelik: t.priority || null, ust: ust || null,
+  saat: t.time || null, hatirlat: t.remind || [], oncelik: t.priority || null, ust: ust || null, sira: t.sira ?? null,
 });
 const sigOf = (t, ust) => JSON.stringify(fieldsOf(t, ust));
 // Görevin üst görevi: listedeki konumundan (alt görev = üstündeki daha az girintili görev); üstü yüklenmemiş (yetim) görev eski üstünü korur
@@ -28,16 +29,18 @@ const isOwner = cat => !!sync && cat.sahip === sync.email;
 function taskFromDoc(d) {
   return {
     id: d.id, done: d.bitti, text: d.metin, due: d.son || undefined, rec: d.tekrar || undefined,
-    created: stampOfMs(d.olusturma), completed: d.bitti ? stampOfMs(d.bitirmeZamani) : undefined,
+    created: d.eklendi || stampOfMs(d.olusturma), completed: d.bitti ? stampOfMs(d.bitirmeZamani) : undefined,
     createdBy: d.olusturan, completedBy: d.bitiren || undefined,
     // eski belgelerde tek "atanan" vardı; yenilerde "atananlar" listesi (varsa o geçerli)
     assignees: (d.atananlar ?? (d.atanan ? [d.atanan] : [])).length ? [...(d.atananlar ?? [d.atanan])] : undefined,
     time: d.saat || undefined, remind: d.hatirlat?.length ? [...d.hatirlat] : undefined, priority: d.oncelik || undefined,
-    parentId: d.ust || undefined,
+    parentId: d.ust || undefined, sira: typeof d.sira === 'number' ? d.sira : undefined,
     ts: d.olusturma || Date.now(), doneTs: d.bitirmeZamani || 0,
   };
 }
-// Sıralama: üst düzeyde oluşturma zamanı (yeni üstte, yapılanlar altta); alt görevler üstünün altında, oluşturma sırasıyla (yapılanlar altta)
+// Sıra: önce yapılmamışlar, sonra "sira" (küçük üstte); sırası olmayan eski görevler oluşturma zamanına göre (yeni üstte)
+const effSira = t => t.sira ?? (t.ts ? -t.ts / 1000 : undefined);
+const cmpSira = (a, b) => (a.done - b.done) || ((effSira(a) ?? 0) - (effSira(b) ?? 0)) || ((b.ts || 0) - (a.ts || 0));
 function sortSharedTree(tasks) {
   const byId = new Map(tasks.filter(t => t.id).map(t => [t.id, t]));
   const kids = new Map(), roots = [];
@@ -52,26 +55,81 @@ function sortSharedTree(tasks) {
     seen.add(t);
     if (level) t.level = level; else delete t.level;
     out.push(t);
-    const c = kids.get(t) || [];
-    for (const k of [...c.filter(x => !x.done).sort((a, b) => a.ts - b.ts), ...c.filter(x => x.done).sort((a, b) => a.ts - b.ts)]) walk(k, Math.min(level + 1, MAX_LEVEL));
+    for (const k of (kids.get(t) || []).sort(cmpSira)) walk(k, Math.min(level + 1, MAX_LEVEL));
   };
-  [...roots.filter(t => !t.done).sort((a, b) => b.ts - a.ts), ...roots.filter(t => t.done).sort((a, b) => b.doneTs - a.doneTs)].forEach(t => walk(t, 0));
+  roots.sort(cmpSira).forEach(t => walk(t, 0));
   tasks.forEach(t => walk(t, 0));   // üst görev döngüsü gibi beklenmedik durumda görev kaybolmasın
   return out;
 }
 
-// Başka bir kategoriye sürüklenen görev (ortak ↔ yerel) taşınmaz, kopyalanır; kopya yeni bir görevdir
+// Liste sırası → "sira" değerleri. Kardeşler (aynı üst görevin altındakiler) liste sırasında artan "sira"ya sahip olmalı;
+// zaten sıralı olanlar (en uzun artan altdizi) korunur, yalnızca yeri değişen görevlere yeni değer verilir → tek bir yazma.
+function assignSira(cat) {
+  const sibs = new Map(), stack = [];
+  for (const t of cat.tasks) {
+    while (stack.length && lvl(stack[stack.length - 1]) >= lvl(t)) stack.pop();
+    const p = stack[stack.length - 1] || null;
+    if (!sibs.has(p)) sibs.set(p, []);
+    sibs.get(p).push(t);
+    stack.push(t);
+  }
+  for (const list of sibs.values()) {
+    const n = list.length, v = list.map(effSira);
+    // en uzun artan altdizi (değeri olanlar arasında), O(n²) yeterli
+    const len = Array(n).fill(0), prev = Array(n).fill(-1);
+    let best = -1;
+    for (let i = 0; i < n; i++) {
+      if (v[i] === undefined) continue;
+      len[i] = 1;
+      for (let j = 0; j < i; j++) if (v[j] !== undefined && v[j] < v[i] && len[j] + 1 > len[i]) { len[i] = len[j] + 1; prev[i] = j; }
+      if (best < 0 || len[i] > len[best]) best = i;
+    }
+    const keep = new Set();
+    for (let i = best; i >= 0; i = prev[i]) keep.add(i);
+    for (let i = 0; i < n;) {
+      if (keep.has(i)) { i++; continue; }
+      let j = i;
+      while (j < n && !keep.has(j)) j++;
+      const lo = i > 0 ? v[i - 1] : undefined, hi = j < n ? v[j] : undefined;   // komşu korunan değerler (komşular yeni değer aldıysa v güncel tutulur)
+      const m = j - i;
+      for (let k = 0; k < m; k++) {
+        const val = lo === undefined && hi === undefined ? k * 1024
+          : lo === undefined ? hi - (m - k) * 1024
+          : hi === undefined ? lo + (k + 1) * 1024
+          : lo + (hi - lo) * (k + 1) / (m + 1);
+        list[i + k].sira = val;
+        v[i + k] = val;
+      }
+      i = j;
+    }
+    // Değerler birbirine çok yaklaştıysa (hassasiyet) tüm kardeşleri yeniden numaralandır
+    for (let i = 1; i < n; i++) if (v[i] - v[i - 1] < 1e-6) { list.forEach((t, k) => { t.sira = k * 1024; }); break; }
+  }
+}
+
+// Başka bir kategoriye taşınan görev yeni belge olur (kategoriler arası taşıma = kopyala + eskisini sil)
 const copyTask = t => ({
   done: t.done, text: t.text, due: t.due, rec: t.rec, time: t.time, remind: t.remind && [...t.remind], priority: t.priority,
-  ...(t.level ? { level: t.level } : {}), created: stampNow(), completed: t.completed,
+  assignees: undefined, ...(t.level ? { level: t.level } : {}), created: t.created || stampNow(), completed: t.completed, sira: undefined,
 });
 
-// --- Yerleşim: ortak kategorinin listedeki yeri cihazda hatırlanır (todo.md yalnızca yerel olanları tutar) ---
-function placeShared(cat) {
-  const at = store.get('catOrder', []).indexOf(sharedKey(cat));
-  if (at === -1) todo.cats.push(cat); else todo.cats.splice(Math.min(at, todo.cats.length), 0, cat);
+// --- Kategori sırası: kişiye özel (users/{uid}/tercihler/kategori); bellekte cids dizisi ---
+let catOrderIds = [];
+function applyCatOrder() {
+  const idx = c => { const i = catOrderIds.indexOf(c.cid); return i < 0 ? 1e9 + (c.ts || 0) / 1e6 : i; };
+  todo.cats.sort((a, b) => idx(a) - idx(b));
 }
-const saveCatOrder = () => { if (sync) store.set('catOrder', todo.cats.map(sharedKey)); };
+let orderTimer = null;
+function saveCatOrder() {
+  if (!sync) return;
+  clearTimeout(orderTimer);
+  orderTimer = setTimeout(() => {
+    const ids = todo.cats.map(c => c.cid).filter(Boolean);
+    if (JSON.stringify(ids) === JSON.stringify(catOrderIds)) return;
+    catOrderIds = ids;
+    cloud.setCatOrder(ids).catch(syncError);
+  }, 800);
+}
 
 // --- Ekran: yazı yazarken / sürüklerken liste yeniden çizilmez, kısa süre sonra yeniden denenir ---
 let renderTimer = null;
@@ -92,7 +150,7 @@ function syncError(e) {
   const el = $('#syncNote');
   syncErrCode = e?.code;
   el.hidden = false;
-  el.title = `Ortak kategoriler eşitlenemedi: ${cloudErrorText(e)}`;
+  el.title = `Bulutla eşitlenemedi: ${cloudErrorText(e)}`;
 }
 // Bağlantı kopması geçicidir: sunucudan haber gelince ⚠ kalkar (kural reddi gibi kalıcı hatalar kalır)
 const clearNetError = () => { if (syncErrCode === 'unavailable') { $('#syncNote').hidden = true; syncErrCode = null; } };
@@ -101,29 +159,37 @@ const clearNetError = () => { if (syncErrCode === 'unavailable') { $('#syncNote'
 function applyCategories(docs) {
   clearNetError();
   const ids = new Set(docs.map(d => d.id));
-  for (const cat of sharedCats()) {
-    if (ids.has(cat.cid)) continue;
+  for (const cat of cloudCats()) {
+    if (ids.has(cat.cid) || cat.pending) continue;   // yeni açılan kategori sunucudan henüz gelmemiş olabilir
     sync.taskUnsubs.get(cat.cid)?.();
     sync.taskUnsubs.delete(cat.cid);
     todo.cats.splice(todo.cats.indexOf(cat), 1);
   }
-  const fresh = [];
   for (const d of docs) {
-    let cat = sharedCats().find(c => c.cid === d.id);
+    let cat = cloudCats().find(c => c.cid === d.id);
     if (!cat) {
-      cat = { name: d.ad, tasks: [], hidden: [], shared: true, cid: d.id, base: new Map() };
-      fresh.push(cat);
+      cat = { name: d.ad, tasks: [], cid: d.id, base: new Map() };
+      todo.cats.push(cat);
     }
-    Object.assign(cat, { name: d.ad, sahip: d.sahip, uyeler: d.uyeler, uyeAdlari: d.uyeAdlari || {}, icon: store.get('catIcons', {})[`c:${d.id}`] });
+    delete cat.pending;
+    Object.assign(cat, {
+      name: d.ad, sahip: d.sahip, uyeler: d.uyeler, uyeAdlari: d.uyeAdlari || {}, icon: d.simge || undefined,
+      deleted: d.silindi === true, silinme: d.silinmeZamani || null, shared: d.uyeler.length > 1, ts: d.olusturma || 0,
+    });
     if (membersCid === d.id) renderMembers(membersMsg);
-    if (!sync.taskUnsubs.has(d.id)) {
-      sync.taskUnsubs.set(d.id, watchCatTasks(d.id));
-    }
+    // Silinmiş kategorinin görevleri dinlenmez (Silinenler'den geri getirilince dinleme başlar)
+    if (cat.deleted) { sync.taskUnsubs.get(d.id)?.(); sync.taskUnsubs.delete(d.id); }
+    else if (!sync.taskUnsubs.has(d.id)) sync.taskUnsubs.set(d.id, watchCatTasks(d.id));
   }
-  const order = store.get('catOrder', []);
-  fresh.sort((a, b) => order.indexOf(sharedKey(a)) - order.indexOf(sharedKey(b)));
-  fresh.forEach(placeShared);
+  applyCatOrder();
+  sync.catsLoaded = true;
+  // İlk yüklemede: eski yerel görevler varsa taşıma sorulur; yoksa ve hiç kategori da yoksa ilk kategori ("Genel") açılır
+  if (!sync.migChecked) {
+    sync.migChecked = true;
+    checkMigration().then(() => { if (mirrorOk && !activeCats().length) createCategory(GENERAL); }).catch(console.error);
+  }
   renderWhenIdle();
+  scheduleMirror();
 }
 
 // Görev dinleyicisi hatayla ölürse (ör. yeni kategori sunucuya henüz ulaşmadan dinlenmeye başlandı → permission-denied)
@@ -144,7 +210,7 @@ function watchCatTasks(cid, attempt = 0) {
 
 function applyTasks(cid, docs) {
   clearNetError();
-  const cat = sharedCats().find(c => c.cid === cid);
+  const cat = cloudCats().find(c => c.cid === cid);
   if (!cat) return;
   const known = new Map(cat.tasks.filter(t => t.id).map(t => [t.id, t]));
   cat.base = new Map();
@@ -156,7 +222,7 @@ function applyTasks(cid, docs) {
       notifyAssigned(cat, fresh);
     }
     // var olan nesne korunur (sürükleme/düzenleme referansları); belgede olmayan alanlar da temizlenir
-    if (t) for (const k of ['assignees', 'time', 'remind', 'priority', 'parentId', 'completedBy', 'due', 'rec', 'completed']) delete t[k];
+    if (t) for (const k of ['assignees', 'time', 'remind', 'priority', 'parentId', 'completedBy', 'due', 'rec', 'completed', 'sira', 'level']) delete t[k];
     if (t) Object.assign(t, fresh);
     return t || fresh;
   });
@@ -166,24 +232,33 @@ function applyTasks(cid, docs) {
   // Konum belli olunca (üst görev + yetim bilgisi) bulutla aynı olan imzalar kaydedilir
   for (const t of cat.tasks) if (t.id) cat.base.set(t.id, sigOf(t, ustOf(cat, t)));
   renderWhenIdle();
-  writeSharedCopy();
+  scheduleMirror();
 }
 
-// Yerel yedek: ortak kategorilerin son hali, veri klasörüne ortak-kopya.json olarak yazılır (Panel yedekleri buna da dahildir)
-const writeSharedCopy = debounce(() => {
-  if (!sync) return;
-  const cats = sharedCats().map(c => ({
-    ad: c.name, id: c.cid, sahip: c.sahip, uyeler: c.uyeler,
-    gorevler: c.tasks.map(t => ({ metin: t.text, bitti: t.done, seviye: t.level || 0, son: t.due || null, saat: t.time || null, tekrar: t.rec || null, atananlar: t.assignees || [], oncelik: t.priority || null, hatirlat: t.remind || [], olusturan: t.createdBy || null, bitiren: t.completedBy || null, eklendi: t.created || null, tamamlandi: t.completed || null })),
-  }));
-  api.todos.writeShared(JSON.stringify({ hesap: sync.email, kaydedildi: new Date().toISOString(), kategoriler: cats }, null, 1)).catch(console.error);
-}, 3000);
+// --- Yerel yedek (todo.md): bulutun otomatik aynası; ne sıklıkla yazılacağı Ayarlar → Bildirim & yedek'te seçilir ---
+// Bulut tek kaynaktır; bu dosya yalnızca yedek ve (gerekirse) başka araçla okumak içindir, elle düzenlenmez.
+const MIRROR_EVERY = { change: 4000, '5': 5 * 60e3, '30': 30 * 60e3, daily: 24 * 3600e3 };   // ms; "off" ve bilinmeyenler yazmaz
+let mirrorTimer = null, mirrorLast = 0;
+function scheduleMirror() {
+  if (!sync || !sync.catsLoaded || !mirrorOk) return;
+  const every = MIRROR_EVERY[settings.mirrorEvery || 'change'];
+  if (!every || mirrorTimer) return;
+  const wait = Math.max(4000, mirrorLast + every - Date.now());
+  mirrorTimer = setTimeout(async () => {
+    mirrorTimer = null;
+    if (!sync || cloudCats().some(c => !c.deleted && !c.loaded)) return scheduleMirror();   // görevler gelmeden dosyayı eksik yazma
+    mirrorLast = Date.now();
+    api.todos.write(serializeTodos()).catch(console.error);
+  }, wait);
+}
 
 // --- Buluta gidenler: imzası değişen/yeni görevleri yaz, listeden kalkanları yumuşak sil ---
 function pushShared() {
   if (!sync) return;
   const me = sync.email;
-  for (const cat of sharedCats()) {
+  for (const cat of cloudCats()) {
+    if (cat.deleted) continue;
+    assignSira(cat);
     const live = new Set();
     for (const t of cat.tasks) {
       if (!t.id) {
@@ -193,8 +268,8 @@ function pushShared() {
         const ust = ustOf(cat, t);
         cat.base.set(t.id, sigOf(t, ust));
         cloud.createTask(cat.cid, t.id, {
-          ...fieldsOf(t, ust), olusturan: me, atanan: null,
-          bitiren: t.done ? me : null, bitirmeZamani: t.done ? cloud.now() : null, silindi: false, silenKisi: null,
+          ...fieldsOf(t, ust), olusturan: me, atanan: null, eklendi: t.created || null,
+          bitiren: t.done ? me : null, bitirmeZamani: t.done ? (t.completed ? cloud.stampTs(t.completed) : cloud.now()) : null, silindi: false, silenKisi: null,
         }).catch(syncError);
         if (t.done) { t.completedBy = me; t.doneTs = Date.now(); }
       } else if (cat.base.get(t.id) !== sigOf(t, ustOf(cat, t))) {
@@ -205,6 +280,8 @@ function pushShared() {
         for (const k of Object.keys(now)) if (JSON.stringify(was[k]) !== JSON.stringify(now[k])) patch[k] = now[k];
         if ('atananlar' in patch) patch.atanan = null;   // eski tek atanan alanı artık kullanılmaz
         if (!!was.bitti !== !!t.done) {
+          // Tamamlama sayacı: yalnızca benim tamamladıklarım sayılır; geri alınca o günkü sayı düşer
+          if (t.done) statsOnDone(cat, t, 1); else if (t.completedBy === me) statsOnDone(cat, { ...t, completed: t.completed || stampOfMs(t.doneTs) }, -1);
           patch.bitiren = t.done ? me : null;
           patch.bitirmeZamani = t.done ? cloud.now() : null;
           t.completedBy = t.done ? me : undefined;
@@ -223,35 +300,50 @@ function pushShared() {
   }
 }
 
+// --- Tamamlama sayaçları (istatistik): users/{uid}/istatistik/ozet; yalnızca benim tamamladıklarım ---
+function statsOnDone(cat, t, sign) {
+  const day = (t.completed || stampNow()).slice(0, 10);
+  const mins = t.created && t.completed ? Math.max(0, Math.round((new Date(t.completed) - new Date(t.created)) / 6e4)) : 0;
+  cloud.statsAdd(cat.cid, day, sign, sign * mins, t.created && t.completed ? sign : 0).catch(syncError);
+}
+
 // --- Kategori işlemleri ---
-function createSharedCategory(name) {
-  cloud.createCategory(cloud.newId(), name).catch(syncError);
+// Kategori hemen listede görünür (bekleyen); buluttan onay gelince birleşir. Aynı anda eklenen görevler sırayla yazıldığı için kurallar kategoriyi görür.
+function createCategory(name) {
+  const id = cloud.newId(), me = sync.email;
+  const cat = { name, tasks: [], cid: id, base: new Map(), sahip: me, uyeler: [me], uyeAdlari: { [me]: cloud.user.ad || '' }, ts: Date.now(), loaded: true, pending: true };
+  todo.cats.push(cat);
+  catOrderIds = todo.cats.map(c => c.cid).filter(Boolean);
+  cloud.createCategory(id, name).then(() => cloud.setCatOrder(catOrderIds)).catch(syncError);
+  renderWhenIdle();
+  return cat;
 }
-function renameSharedCategory(cat, name) {
-  cloud.renameCategory(cat.cid, name).catch(syncError);
-}
-function deleteSharedCategory(cat) {
-  cloud.deleteCategory(cat.cid).catch(syncError);
-}
+function renameCloudCategory(cat, name) { cloud.updateCategory(cat.cid, { ad: name }).catch(syncError); }
+// Kategori silinmez, "silindi" işaretlenir (Silinenler'den geri getirilir)
+function softDeleteCategory(cat) { cloud.updateCategory(cat.cid, { silindi: true, silinmeZamani: cloud.now() }).catch(syncError); }
+function restoreCloudCategory(cat) { cloud.updateCategory(cat.cid, { silindi: false }).catch(syncError); }
 
 // --- Oturuma bağlı yaşam döngüsü ---
 function stopSharedSync() {
   if (!sync) return;
   sync.unsubCats();
+  sync.unsubOrder?.();
   sync.taskUnsubs.forEach(u => u());
   sync = null;
-  todo.cats = todo.cats.filter(c => !c.shared);
+  todo.cats = [];
+  catOrderIds = [];
   $('#syncNote').hidden = true;
   renderTodos();
 }
 function startSharedSync(user) {
   if (sync && sync.email === user.email) return;
   stopSharedSync();
-  sync = { email: user.email, taskUnsubs: new Map() };
+  sync = { email: user.email, taskUnsubs: new Map(), catsLoaded: false };
+  sync.unsubOrder = cloud.watchCatOrder(ids => { catOrderIds = ids; applyCatOrder(); renderWhenIdle(); }, syncError);
   sync.unsubCats = cloud.watchCategories(user.email, applyCategories, syncError);
+  cloud.loadStats().then(() => renderStats()).catch(syncError);
 }
 cloud.onChange(user => {
-  $('#addSharedCat').hidden = !(user && user.active);
   if (user && user.active) startSharedSync(user); else stopSharedSync();
 });
 
@@ -308,7 +400,7 @@ function openMembers(cat) {
 function renderMembers(msg = '') {
   membersMsg = msg;
   if (!membersCid) return;
-  const cat = sharedCats().find(c => c.cid === membersCid);
+  const cat = cloudCats().find(c => c.cid === membersCid);
   if (!cat) { membersCid = null; if (membersDlg.open) membersDlg.close(); return; }
   const owner = isOwner(cat);
   $('#memTitle').textContent = `Üyeler · ${cat.name}`;
@@ -357,7 +449,7 @@ async function removeMember(cat, email) {
 async function deletedSharedTasks() {
   if (!sync) return [];
   const rows = [];
-  for (const cat of sharedCats()) {
+  for (const cat of cloudCats().filter(c => !c.deleted)) {
     try {
       for (const d of await cloud.listDeletedTasks(cat.cid)) {
         rows.push({ cat, id: d.id, text: d.metin, at: d.guncelleme, by: d.silenKisi ? memberName(cat, d.silenKisi) : '' });

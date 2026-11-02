@@ -29,7 +29,6 @@ const dataDir = () => path.join(app.getPath('userData'), 'data');
 const notesDir = () => path.join(dataDir(), 'notes');
 const imagesDir = () => path.join(notesDir(), 'resimler');
 const todoFile = () => path.join(dataDir(), 'todo.md');
-const sharedCopyFile = () => path.join(dataDir(), 'ortak-kopya.json');   // ortak kategorilerin yerel yedeği (kaynak bulut)
 const settingsFile = () => path.join(dataDir(), 'settings.json');
 
 const DEFAULT_SETTINGS = {
@@ -52,6 +51,8 @@ const DEFAULT_SETTINGS = {
   // Ortak kategorilerdeki görevler Spark'a (Gemini'ye) gönderilsin mi
   sparkSeesShared: true,
   ttsModels: 'gemini-2.5-flash-preview-tts',
+  // Bulut kaynağın todo.md aynası ne sıklıkla yazılsın: 'change' | '5' | '30' | 'daily' | 'off' (dakika / günlük)
+  mirrorEvery: 'change',
 };
 
 async function ensureData() {
@@ -537,7 +538,6 @@ async function geminiTts(text, voiceOverride) {
 function registerIpc() {
   ipcMain.handle('todos:read', () => fs.readFile(todoFile(), 'utf8'));
   ipcMain.handle('todos:write', (_e, content) => writeAtomic(todoFile(), String(content)));
-  ipcMain.handle('todos:writeShared', (_e, content) => writeAtomic(sharedCopyFile(), String(content)));
 
   // Pasif (silinmiş) notlar listede gösterilmez; dosyaları yerinde durur.
   ipcMain.handle('notes:list', async () =>
@@ -608,6 +608,17 @@ function registerIpc() {
     const s = await writeSettings(patch);
     if ('autostart' in patch) applyAutostart(s.autostart);
     return withRuntime(s);
+  });
+  // Yerel todo.md'nin kopyası (buluta taşıma öncesi): todo-eski-<tarih>.md; aynı gün tekrar çağrılırsa numaralanır
+  ipcMain.handle('todos:archive', async () => {
+    const src = todoFile();
+    const exists = f => fs.access(f).then(() => true, () => false);
+    if (!(await exists(src))) return null;
+    const base = path.join(dataDir(), `todo-eski-${todayISO()}`);
+    let dest = `${base}.md`;
+    for (let i = 2; await exists(dest); i++) dest = `${base}-${i}.md`;
+    await fs.copyFile(src, dest);
+    return dest;
   });
   ipcMain.handle('app:openDataDir', () => shell.openPath(dataDir()));
   ipcMain.handle('app:quit', () => { quitting = true; app.quit(); });

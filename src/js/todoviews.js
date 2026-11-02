@@ -66,6 +66,7 @@ function renderGrouped(root) {
 
   // Hızlı ekleme: seçili kategoriye (en son kullanılan); "yarın 15:30", "her hafta" gibi ifadeler tanınır
   const cat = currentCat();
+  if (!cat) return 0;   // kategori yok (bulut henüz yüklenmedi)
   const form = document.createElement('form');
   form.className = 'tv-add';
   form.innerHTML = `<input placeholder="Görev ekle… (Enter) — kategori: ${esc(cat.name)}" autocomplete="off">`;

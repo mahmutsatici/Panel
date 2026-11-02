@@ -141,8 +141,10 @@ $('#geminiTest').onclick = async () => {
 };
 
 // --- Sabah bildirimi & otomatik yedek ---
+$('#mirrorEvery').onchange = async e => { settings = await api.settings.set({ mirrorEvery: e.target.value }); scheduleMirror(); };
 function renderNotifyBackup() {
   const n = settings.notify || {}, b = settings.backup || {};
+  $('#mirrorEvery').value = settings.mirrorEvery || 'change';
   $('#notifyChk').checked = !!n.enabled;
   $('#notifyTime').value = n.time || '09:00';
   $('#backupChk').checked = !!b.enabled;
